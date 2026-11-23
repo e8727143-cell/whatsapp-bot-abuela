@@ -56,44 +56,132 @@ function log(msg) {
 
 /**
  * Transcribe un audio de WhatsApp (formato OGG Opus) palabra por palabra a texto en español.
- * Utiliza la API multimodal ultrarrápida de Gemini Flash.
+ * Soporta Groq Whisper Cloud (whisper-large-v3-turbo) y Whisper local vía Python faster-whisper.
  */
-async function transcribirAudioConGemini(audioBuffer) {
-    try {
-        const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyBnt8_IUnbEA1d3cgCqYTQTOel89nlUsUU';
-        const base64Audio = audioBuffer.toString('base64');
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+async function transcribirAudioConWhisper(audioBuffer) {
+    // 1. Groq Cloud Whisper API (rápido, gratuito, modelo whisper-large-v3-turbo)
+    const groqKey = process.env.GROQ_API_KEY;
+    if (groqKey) {
+        try {
+            const formData = new FormData();
+            const blob = new Blob([audioBuffer], { type: 'audio/ogg' });
+            formData.append('file', blob, 'audio.ogg');
+            formData.append('model', 'whisper-large-v3-turbo');
+            formData.append('language', 'es');
 
-        const res = await fetch(url, {
+            const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${groqKey}` },
+                body: formData
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                const texto = data.text?.trim();
+                if (texto && texto.length > 0) {
+                    log(`✅ [GROQ WHISPER] Transcripción lograda: "${texto}"`);
+                    return texto;
+                }
+            } else {
+                const errText = await res.text();
+                log(`⚠️ [GROQ WHISPER ERROR] HTTP ${res.status}: ${errText.slice(0, 150)}`);
+            }
+        } catch (e) {
+            log(`⚠️ [GROQ WHISPER EXCEPCION] ${e.message}`);
+        }
+    }
+
+    // 2. OpenAI Whisper Cloud API (si se tiene OPENAI_API_KEY)
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+        try {
+            const formData = new FormData();
+            const blob = new Blob([audioBuffer], { type: 'audio/ogg' });
+            formData.append('file', blob, 'audio.ogg');
+            formData.append('model', 'whisper-1');
+            formData.append('language', 'es');
+
+            const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${openaiKey}` },
+                body: formData
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                const texto = data.text?.trim();
+                if (texto && texto.length > 0) {
+                    log(`✅ [OPENAI WHISPER] Transcripción lograda: "${texto}"`);
+                    return texto;
+                }
+            } else {
+                const errText = await res.text();
+                log(`⚠️ [OPENAI WHISPER ERROR] HTTP ${res.status}: ${errText.slice(0, 150)}`);
+            }
+        } catch (e) {
+            log(`⚠️ [OPENAI WHISPER EXCEPCION] ${e.message}`);
+        }
+    }
+
+    // 3. Fallback local Python con faster-whisper (si corre en la PC o si python está disponible)
+    const localPy = path.join(__dirname, 'transcribir_audio.py');
+    if (fs.existsSync(localPy)) {
+        try {
+            const tmpAudio = path.join(__dirname, `tmp_rec_${Date.now()}.ogg`);
+            fs.writeFileSync(tmpAudio, audioBuffer);
+            const stdout = require('child_process').execSync(`python "${localPy}" "${tmpAudio}"`, { timeout: 12000 }).toString().trim();
+            if (fs.existsSync(tmpAudio)) fs.unlinkSync(tmpAudio);
+            if (stdout && stdout.length > 0) {
+                log(`✅ [LOCAL WHISPER] Transcripción lograda: "${stdout}"`);
+                return stdout;
+            }
+        } catch (e) {
+            log(`ℹ️ [LOCAL WHISPER] No se pudo ejecutar localmente: ${e.message}`);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Genera una nota de voz dinámica con la voz clonada de la Abuela Tulun usando Fish Audio en formato OGG Opus nativo.
+ */
+async function generarAudioRespuesta(texto) {
+    try {
+        const apiKey = process.env.FISH_AUDIO_API_KEY || 'sk-fish-zCSDe863JiD4uHHwxyQhamHAiGXnDHK0DraEOddumVE';
+        const voiceId = process.env.FISH_AUDIO_VOICE_ID || '9edee5f570a944bfb9531f12b806efe9';
+
+        // Limpiar URLs o asteriscos para que la voz no pronuncie enlaces feos
+        const textoLimpio = texto
+            .replace(/https?:\/\/[^\s]+/gi, 'en el enlace que te dejo acá abajo')
+            .replace(/[\*\_~]/g, '')
+            .trim();
+
+        if (!textoLimpio) return null;
+
+        const res = await fetch('https://api.fish.audio/v1/tts', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'model': 's2.1-pro-free'
+            },
             body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: 'Transcribe exactamente todo lo que dice esta persona en su nota de voz de WhatsApp, palabra por palabra en español. Devuelve únicamente el texto transcrito sin comillas, explicaciones ni comentarios adicionales.' },
-                        {
-                            inlineData: {
-                                mimeType: 'audio/ogg',
-                                data: base64Audio
-                            }
-                        }
-                    ]
-                }]
+                text: textoLimpio,
+                reference_id: voiceId,
+                format: 'opus'
             })
         });
 
         if (res.ok) {
-            const data = await res.json();
-            const transcripcion = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (transcripcion && transcripcion.length > 0) {
-                return transcripcion;
-            }
+            const arrayBuffer = await res.arrayBuffer();
+            return Buffer.from(arrayBuffer);
         } else {
-            const errText = await res.text();
-            log(`⚠️ [GEMINI STT ERROR] HTTP ${res.status}: ${errText.slice(0, 150)}`);
+            const err = await res.text();
+            log(`⚠️ [FISH AUDIO ERROR] HTTP ${res.status}: ${err.slice(0, 100)}`);
         }
     } catch (e) {
-        log(`⚠️ [GEMINI STT EXCEPCION] ${e.message}`);
+        log(`⚠️ [FISH AUDIO EXCEPCION] ${e.message}`);
     }
     return null;
 }
@@ -520,18 +608,18 @@ async function startWhatsApp() {
                         audioBuffer = Buffer.concat([audioBuffer, chunk]);
                     }
 
-                    log(`🔄 [TRANSCRIBIENDO AUDIO] (${audioBuffer.length} bytes)...`);
-                    const textoTranscrito = await transcribirAudioConGemini(audioBuffer);
+                    log(`🔄 [TRANSCRIBIENDO AUDIO CON WHISPER] (${audioBuffer.length} bytes)...`);
+                    const textoTranscrito = await transcribirAudioConWhisper(audioBuffer);
                     if (textoTranscrito && textoTranscrito.length > 0) {
                         body = textoTranscrito;
-                        log(`✅ [TRANSCRIPCIÓN EXITOSA] De ${remoteJid}: "${body}"`);
+                        log(`✅ [TRANSCRIPCIÓN WHISPER EXITOSA] De ${remoteJid}: "${body}"`);
                     } else {
-                        body = 'Hola abuela, te mandé un audio con dudas sobre mis dolores y cómo sanar.';
-                        log(`ℹ️ [TRANSCRIPCIÓN VACÍA] Usando contexto de audio de salud.`);
+                        body = 'Hola abuela, tengo molestias y dolores en el cuerpo, ¿qué remedios caseros me recomiendas para sanar?';
+                        log(`ℹ️ [FALLBACK CONTEXTO SALUD] No se pudo transcribir, inyectando duda de salud.`);
                     }
                 } catch (errAudio) {
                     log(`⚠️ [ERROR AL DESCARGAR/TRANSCRIBIR AUDIO] ${errAudio.message}`);
-                    body = 'Hola abuela, te envié una nota de voz con mis dudas de salud.';
+                    body = 'Hola abuela, tengo molestias y dolores en el cuerpo, ¿qué remedios caseros me recomiendas para sanar?';
                 }
             }
 
@@ -546,8 +634,8 @@ async function startWhatsApp() {
             // En grupos solo respondemos si coincide con el disparador para no saturar
             if (esGrupo && !esDisparador) return;
 
-            // 1. Pausa humana natural de 5 a 7 segundos antes de responder
-            const delayLectura = 5000 + Math.floor(Math.random() * 2500);
+            // 1. Pausa humana natural de 4 a 6 segundos antes de responder
+            const delayLectura = 4000 + Math.floor(Math.random() * 2000);
             log(`⏳ [Pausa Humana] Simulando lectura (${(delayLectura / 1000).toFixed(1)}s)...`);
             await new Promise(r => setTimeout(r, delayLectura));
 
@@ -564,7 +652,7 @@ async function startWhatsApp() {
                 } catch (e) {
                     log(`[ERROR SALUDO IA] ${e.message}`);
                     await sock.sendMessage(remoteJid, {
-                        text: 'Hola, qué lindo que me escribas. Cuéntame con confianza, ¿qué dolor o qué molestia tienes hoy? Dime y te escucho con calma.'
+                        text: 'Hola, qué lindo que me escribas. Cuéntame con confianza, ¿qué dolor o qué molestia tienes hoy? Dime y te leo con calma.'
                     });
                 }
                 return;
@@ -576,21 +664,26 @@ async function startWhatsApp() {
                 const textoPaso1 = 'Hola... ¿cómo estás? Qué lindo que me escribas por acá. Mira, antes de hablarte del libro... cuéntame, ¿qué dolor o qué molestia tienes hoy? Dime y te escucho con calma.';
                 let enviado = false;
 
-                try {
-                    await sock.sendPresenceUpdate('recording', remoteJid);
-                    await new Promise(r => setTimeout(r, 2500));
+                for (let intento = 1; intento <= 3; intento++) {
+                    try {
+                        log(`[INTENTO ${intento}/3] Enviando Audio 1 a ${remoteJid}...`);
+                        await sock.sendPresenceUpdate('recording', remoteJid);
+                        await new Promise(r => setTimeout(r, 2000));
 
-                    if (fs.existsSync(audio1Path)) {
-                        await sock.sendMessage(remoteJid, {
-                            audio: fs.readFileSync(audio1Path),
-                            mimetype: 'audio/ogg; codecs=opus',
-                            ptt: true
-                        });
-                        enviado = true;
-                        log(`[ENVIADO] Audio 1 (12s) entregado a ${remoteJid}`);
+                        if (fs.existsSync(audio1Path)) {
+                            await sock.sendMessage(remoteJid, {
+                                audio: fs.readFileSync(audio1Path),
+                                mimetype: 'audio/ogg; codecs=opus',
+                                ptt: true
+                            });
+                            enviado = true;
+                            log(`[ENVIADO] Audio 1 (12s) entregado a ${remoteJid} en intento ${intento}`);
+                            break;
+                        }
+                    } catch (errAudio) {
+                        log(`⚠️ [FALLO INTENTO ${intento}/3 AUDIO 1] ${errAudio.message}`);
+                        if (intento < 3) await new Promise(r => setTimeout(r, 2000));
                     }
-                } catch (errAudio) {
-                    log(`⚠️ [FALLBACK AUDIO 1] Falló subida de audio (${errAudio.message}). Enviando texto de respaldo...`);
                 }
 
                 if (!enviado) {
@@ -610,21 +703,26 @@ async function startWhatsApp() {
                 const textoPaso2 = 'Te entiendo tan bien... sé lo pesado que es vivir con esa molestia. Pero tranquila, en tu propia cocina tienes todo para aliviarte de raíz. El libro es digital, cuesta solo siete dólares y te llega al momento. ¿Quieres que te pase el enlace?';
                 let enviado = false;
 
-                try {
-                    await sock.sendPresenceUpdate('recording', remoteJid);
-                    await new Promise(r => setTimeout(r, 2500));
+                for (let intento = 1; intento <= 3; intento++) {
+                    try {
+                        log(`[INTENTO ${intento}/3] Enviando Audio 2 a ${remoteJid}...`);
+                        await sock.sendPresenceUpdate('recording', remoteJid);
+                        await new Promise(r => setTimeout(r, 2000));
 
-                    if (fs.existsSync(audio2Path)) {
-                        await sock.sendMessage(remoteJid, {
-                            audio: fs.readFileSync(audio2Path),
-                            mimetype: 'audio/ogg; codecs=opus',
-                            ptt: true
-                        });
-                        enviado = true;
-                        log(`[ENVIADO] Audio 2 (13s) entregado a ${remoteJid}`);
+                        if (fs.existsSync(audio2Path)) {
+                            await sock.sendMessage(remoteJid, {
+                                audio: fs.readFileSync(audio2Path),
+                                mimetype: 'audio/ogg; codecs=opus',
+                                ptt: true
+                            });
+                            enviado = true;
+                            log(`[ENVIADO] Audio 2 (16s) entregado a ${remoteJid} en intento ${intento}`);
+                            break;
+                        }
+                    } catch (errAudio) {
+                        log(`⚠️ [FALLO INTENTO ${intento}/3 AUDIO 2] ${errAudio.message}`);
+                        if (intento < 3) await new Promise(r => setTimeout(r, 2000));
                     }
-                } catch (errAudio) {
-                    log(`⚠️ [FALLBACK AUDIO 2] Falló subida de audio (${errAudio.message}). Enviando texto de respaldo...`);
                 }
 
                 if (!enviado) {
@@ -638,16 +736,16 @@ async function startWhatsApp() {
                 return;
             }
 
-            // PASO 3: Conversación inteligente y natural con IA DeepSeek
+            // PASO 3: Conversación inteligente y natural con IA DeepSeek (SIEMPRE RESPONDE EN TEXTO)
             if (estadoActual === 'ia_activa' || esDisparador) {
-                log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid}...`);
+                log(`[DEEPSEEK] Consultando IA para responder en texto a ${remoteJid}...`);
                 try {
                     await sock.sendPresenceUpdate('composing', remoteJid);
                     await new Promise(r => setTimeout(r, 2000));
 
                     const respuestaIA = await responderComoAbuela(remoteJid, body);
                     await sock.sendMessage(remoteJid, { text: respuestaIA });
-                    log(`[ENVIADO] Respuesta DeepSeek enviada a ${remoteJid}`);
+                    log(`[ENVIADO] Respuesta en texto enviada a ${remoteJid}`);
 
                     if (!estados[remoteJid]) {
                         estados[remoteJid] = { paso: 'ia_activa', timestamp: new Date().toISOString() };

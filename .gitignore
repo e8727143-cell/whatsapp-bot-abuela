@@ -1,3 +1,6 @@
 node_modules
 auth_info
 .env
+conversaciones.json
+estados_clientes.json
+tmp_rec_*.ogg
