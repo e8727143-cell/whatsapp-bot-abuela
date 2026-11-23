@@ -108,7 +108,11 @@ app.get('/', (req, res) => {
             <h1>👵 Bot Inteligente de la Abuela Tulun</h1>
             <div class="subtitle">Servidor Render 24/7 • IA DeepSeek V4.1 Flash + Embudo de Voz de 2 Pasos</div>
             
-            <div id="statusBadge" class="badge waiting">
+            <div id="statusBanner" style="padding: 14px 18px; border-radius: 12px; font-weight: 700; font-size: 15px; margin-bottom: 20px; transition: all 0.3s ease; background: ${isConnected ? '#064e3b' : '#7f1d1d'}; color: ${isConnected ? '#34d399' : '#fca5a5'}; border: 1px solid ${isConnected ? '#059669' : '#dc2626'};">
+                ${isConnected ? '🟢 WHATSAPP CONECTADO Y EN LÍNEA 24/7 (EL BOT ESTÁ RESPONDIENDO)' : '🔴 WHATSAPP DESCONECTADO (VINCULA TU WHATSAPP ABAJO PARA ACTIVARLO)'}
+            </div>
+            
+            <div id="statusBadge" class="badge ${isConnected ? 'connected' : 'waiting'}">
                 ${connectionStatus}
             </div>
 
@@ -242,14 +246,23 @@ app.get('/', (req, res) => {
                     const res = await fetch('/status');
                     const data = await res.json();
                     
+                    const banner = document.getElementById('statusBanner');
                     const badge = document.getElementById('statusBadge');
                     badge.innerText = data.statusText;
                     
                     if (data.connected) {
+                        banner.style.background = '#064e3b';
+                        banner.style.color = '#34d399';
+                        banner.style.border = '1px solid #059669';
+                        banner.innerText = '🟢 WHATSAPP CONECTADO Y EN LÍNEA 24/7 (EL BOT ESTÁ RESPONDIENDO)';
                         badge.className = 'badge connected';
                         document.getElementById('notConnectedArea').style.display = 'none';
                         document.getElementById('connectedArea').style.display = 'block';
                     } else {
+                        banner.style.background = '#7f1d1d';
+                        banner.style.color = '#fca5a5';
+                        banner.style.border = '1px solid #dc2626';
+                        banner.innerText = '🔴 WHATSAPP DESCONECTADO (VINCULA TU WHATSAPP ABAJO PARA ACTIVARLO)';
                         badge.className = 'badge waiting';
                         document.getElementById('notConnectedArea').style.display = 'block';
                         document.getElementById('connectedArea').style.display = 'none';
@@ -431,15 +444,21 @@ async function startWhatsApp() {
             if (!msg.message || msg.key.fromMe) return;
 
             const remoteJid = msg.key.remoteJid;
-            if (remoteJid.endsWith('@g.us') || remoteJid.includes('@newsletter') || remoteJid.includes('status@broadcast')) {
+            if (remoteJid.includes('@newsletter') || remoteJid.includes('status@broadcast')) {
                 return;
             }
 
+            const esGrupo = remoteJid.endsWith('@g.us');
+
+            // Desempaquetar contenido de mensaje efímero o normal
+            const messageContent = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
+            const esAudio = Boolean(messageContent?.audioMessage);
+
             const body = (
-                msg.message.conversation ||
-                msg.message.extendedTextMessage?.text ||
-                msg.message.imageMessage?.caption ||
-                ''
+                messageContent?.conversation ||
+                messageContent?.extendedTextMessage?.text ||
+                messageContent?.imageMessage?.caption ||
+                (esAudio ? '[nota de voz recibida]' : '')
             ).trim();
 
             if (!body) return;
@@ -449,6 +468,9 @@ async function startWhatsApp() {
             const estadoActual = estados[remoteJid]?.paso;
 
             const esDisparador = /(adquirir|libro|receta|recetas|valor|precio|costo|comprar|cu[aá]nto|hola abuela)/i.test(body);
+
+            // En grupos solo respondemos si coincide con el disparador para no saturar
+            if (esGrupo && !esDisparador) return;
 
             // 1. Pausa humana natural de 5 a 7 segundos antes de responder
             const delayLectura = 5000 + Math.floor(Math.random() * 2500);
@@ -479,9 +501,9 @@ async function startWhatsApp() {
                 return;
             }
 
-            // PASO 2: Responde contando su dolor -> Envía Audio 2 (Solución natural, libro digital, $7 USD y cierre)
+            // PASO 2: Responde contando su dolor (texto o audio) -> Envía Audio 2 (Solución, Ebook digital, $7 USD y cierre)
             if (estadoActual === 'esperando_problema') {
-                log(`[EMBUDO] Problema de salud recibido de ${remoteJid}: "${body}". Enviando Audio 2...`);
+                log(`[EMBUDO] Problema recibido de ${remoteJid}: "${body}". Enviando Audio 2...`);
                 try {
                     await sock.sendPresenceUpdate('recording', remoteJid);
                     await new Promise(r => setTimeout(r, 4000));
@@ -510,7 +532,8 @@ async function startWhatsApp() {
                     await sock.sendPresenceUpdate('composing', remoteJid);
                     await new Promise(r => setTimeout(r, 3000));
 
-                    const respuestaIA = await responderComoAbuela(remoteJid, body);
+                    const textoParaIA = esAudio ? 'Hola abuela, te envié un audio contándote mis dudas de salud y del libro.' : body;
+                    const respuestaIA = await responderComoAbuela(remoteJid, textoParaIA);
                     await sock.sendMessage(remoteJid, { text: respuestaIA }, { quoted: msg });
                     log(`[ENVIADO] Respuesta DeepSeek enviada a ${remoteJid}`);
 
