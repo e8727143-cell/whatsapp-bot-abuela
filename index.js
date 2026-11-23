@@ -1,3 +1,8 @@
+const dns = require('dns');
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
+
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -480,48 +485,68 @@ async function startWhatsApp() {
             // PASO 1: Mensaje inicial / Disparador -> Envía Audio 1 (Bienvenida y pregunta de salud)
             if (!estadoActual && esDisparador) {
                 log(`[EMBUDO] Disparador recibido de ${remoteJid}. Enviando Audio 1...`);
+                const textoPaso1 = 'Hola, hija mía. Qué lindo que me escribas. Antes de hablarte del libro, cuéntame... ¿qué molestia o dolorcito tienes hoy que te gustaría que aliviemos juntas? Te escucho con cariño.';
+                let enviado = false;
+
                 try {
                     await sock.sendPresenceUpdate('recording', remoteJid);
-                    await new Promise(r => setTimeout(r, 3500));
+                    await new Promise(r => setTimeout(r, 2500));
 
                     if (fs.existsSync(audio1Path)) {
                         await sock.sendMessage(remoteJid, {
                             audio: fs.readFileSync(audio1Path),
                             mimetype: 'audio/ogg; codecs=opus',
                             ptt: true
-                        }, { quoted: msg });
-                        log(`[ENVIADO] Audio 1 (Bienvenida/Diagnóstico) entregado a ${remoteJid}`);
+                        });
+                        enviado = true;
+                        log(`[ENVIADO] Audio 1 (12s) entregado a ${remoteJid}`);
                     }
-
-                    estados[remoteJid] = { paso: 'esperando_problema', timestamp: new Date().toISOString() };
-                    guardarEstados(estados);
-                } catch (err) {
-                    log(`[ERROR PASO 1] ${err.message}`);
+                } catch (errAudio) {
+                    log(`⚠️ [FALLBACK AUDIO 1] Falló subida de audio (${errAudio.message}). Enviando texto de respaldo...`);
                 }
+
+                if (!enviado) {
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await sock.sendMessage(remoteJid, { text: textoPaso1 });
+                    log(`[ENVIADO] Texto Paso 1 entregado a ${remoteJid}`);
+                }
+
+                estados[remoteJid] = { paso: 'esperando_problema', timestamp: new Date().toISOString() };
+                guardarEstados(estados);
                 return;
             }
 
             // PASO 2: Responde contando su dolor (texto o audio) -> Envía Audio 2 (Solución, Ebook digital, $7 USD y cierre)
             if (estadoActual === 'esperando_problema') {
                 log(`[EMBUDO] Problema recibido de ${remoteJid}: "${body}". Enviando Audio 2...`);
+                const textoPaso2 = 'Te entiendo bien, hija. Con mis recetas en letra grande vas a sanar de raíz en tu propia cocina. El libro es digital, sale solo siete dólares y te llega al instante. ¿Quieres que te pase el link?';
+                let enviado = false;
+
                 try {
                     await sock.sendPresenceUpdate('recording', remoteJid);
-                    await new Promise(r => setTimeout(r, 4000));
+                    await new Promise(r => setTimeout(r, 2500));
 
                     if (fs.existsSync(audio2Path)) {
                         await sock.sendMessage(remoteJid, {
                             audio: fs.readFileSync(audio2Path),
                             mimetype: 'audio/ogg; codecs=opus',
                             ptt: true
-                        }, { quoted: msg });
-                        log(`[ENVIADO] Audio 2 (Solución/Ebook digital) entregado a ${remoteJid}`);
+                        });
+                        enviado = true;
+                        log(`[ENVIADO] Audio 2 (13s) entregado a ${remoteJid}`);
                     }
-
-                    estados[remoteJid] = { paso: 'ia_activa', problema: body, timestamp: new Date().toISOString() };
-                    guardarEstados(estados);
-                } catch (err) {
-                    log(`[ERROR PASO 2] ${err.message}`);
+                } catch (errAudio) {
+                    log(`⚠️ [FALLBACK AUDIO 2] Falló subida de audio (${errAudio.message}). Enviando texto de respaldo...`);
                 }
+
+                if (!enviado) {
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await sock.sendMessage(remoteJid, { text: textoPaso2 });
+                    log(`[ENVIADO] Texto Paso 2 entregado a ${remoteJid}`);
+                }
+
+                estados[remoteJid] = { paso: 'ia_activa', problema: body, timestamp: new Date().toISOString() };
+                guardarEstados(estados);
                 return;
             }
 
@@ -530,11 +555,11 @@ async function startWhatsApp() {
                 log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid}...`);
                 try {
                     await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 3000));
+                    await new Promise(r => setTimeout(r, 2000));
 
                     const textoParaIA = esAudio ? 'Hola abuela, te envié un audio contándote mis dudas de salud y del libro.' : body;
                     const respuestaIA = await responderComoAbuela(remoteJid, textoParaIA);
-                    await sock.sendMessage(remoteJid, { text: respuestaIA }, { quoted: msg });
+                    await sock.sendMessage(remoteJid, { text: respuestaIA });
                     log(`[ENVIADO] Respuesta DeepSeek enviada a ${remoteJid}`);
 
                     if (!estados[remoteJid]) {
@@ -543,6 +568,9 @@ async function startWhatsApp() {
                     }
                 } catch (err) {
                     log(`[ERROR DEEPSEEK] ${err.message}`);
+                    await sock.sendMessage(remoteJid, {
+                        text: 'Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu cocina. Si quieres ver el libro completo en letra grande, puedes verlo aquí: https://abuelatulun.site 💛'
+                    });
                 }
             }
         });
