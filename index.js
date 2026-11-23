@@ -3,7 +3,8 @@ const {
     useMultiFileAuthState,
     DisconnectReason,
     Browsers,
-    makeCacheableSignalKeyStore
+    makeCacheableSignalKeyStore,
+    fetchLatestBaileysVersion
 } = require('@whiskeysockets/baileys');
 const express = require('express');
 const QRCode = require('qrcode');
@@ -17,16 +18,23 @@ app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 10000;
 
+// Buffer de logs para diagnóstico remoto
+const recentLogs = [];
+function log(msg) {
+    const entry = `[${new Date().toISOString()}] ${msg}`;
+    console.log(entry);
+    recentLogs.push(entry);
+    if (recentLogs.length > 300) recentLogs.shift();
+}
+
 let sock = null;
 let currentQR = null;
 let qrImageBase64 = null;
 let connectionStatus = 'Iniciando conexión con WhatsApp...';
 let isConnected = false;
 let pairingCode = null;
-let authState = null;
-let saveCredsFn = null;
 
-// Dashboard Web interactivo y reactivo
+// Dashboard Web
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -34,14 +42,14 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bot de WhatsApp - Recetas de la Abuela</title>
+        <title>Bot de WhatsApp - Recetas de la Abuela (Cloud 24/7)</title>
         <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0b132b; color: #f8fafc; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-            .card { background: #1c2541; border-radius: 20px; padding: 32px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4); max-width: 520px; width: 100%; border: 1px solid #3a506b; text-align: center; }
+            .card { background: #1c2541; border-radius: 20px; padding: 32px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4); max-width: 540px; width: 100%; border: 1px solid #3a506b; text-align: center; }
             h1 { font-size: 24px; margin-bottom: 8px; color: #6fffe9; font-weight: 700; }
             .subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 20px; }
-            .badge { display: inline-block; padding: 8px 18px; border-radius: 9999px; font-size: 14px; font-weight: 600; margin-bottom: 24px; transition: all 0.3s ease; }
+            .badge { display: inline-block; padding: 8px 18px; border-radius: 9999px; font-size: 14px; font-weight: 600; margin-bottom: 20px; transition: all 0.3s ease; }
             .badge.waiting { background: #fef08a; color: #854d0e; }
             .badge.connected { background: #bbf7d0; color: #166534; box-shadow: 0 0 15px rgba(74, 222, 128, 0.4); }
             .badge.reconnecting { background: #fed7aa; color: #9a3412; }
@@ -51,7 +59,7 @@ app.get('/', (req, res) => {
             .tab-content { display: none; }
             .tab-content.active { display: block; }
             .qr-box { background: white; padding: 16px; border-radius: 16px; display: inline-block; margin: 12px 0; }
-            .qr-box img { display: block; width: 220px; height: 220px; }
+            .qr-box img { display: block; width: 230px; height: 230px; }
             .pairing-box { background: #0b132b; padding: 20px; border-radius: 12px; margin: 12px 0; border: 1px solid #3a506b; text-align: left; }
             .pairing-box label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; }
             .pairing-input-row { display: flex; gap: 8px; }
@@ -68,13 +76,16 @@ app.get('/', (req, res) => {
             .audio-test { margin-top: 20px; padding: 16px; background: #0b132b; border-radius: 12px; text-align: left; }
             .audio-test p { font-size: 12px; color: #94a3b8; margin-bottom: 8px; }
             audio { width: 100%; height: 36px; border-radius: 8px; }
+            .actions-bar { margin-top: 16px; display: flex; justify-content: center; gap: 12px; }
+            .btn-small { background: #334155; border: none; color: #94a3b8; padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; text-decoration: none; }
+            .btn-small:hover { background: #475569; color: white; }
             .footer { margin-top: 24px; font-size: 12px; color: #64748b; }
         </style>
     </head>
     <body>
         <div class="card">
             <h1>👵 Bot de Recetas de la Abuela</h1>
-            <div class="subtitle">Servicio de Respuesta Automática 24/7 con Nota de Voz</div>
+            <div class="subtitle">Servidor Render 24/7 • Respuestas Automáticas con Voz</div>
             
             <div id="statusBadge" class="badge waiting">
                 ${connectionStatus}
@@ -82,7 +93,7 @@ app.get('/', (req, res) => {
 
             <div id="notConnectedArea" style="display: ${isConnected ? 'none' : 'block'};">
                 <div class="tabs">
-                    <button class="tab-btn active" onclick="switchTab('tab-phone')">📱 Vincular por Número (Fácil)</button>
+                    <button class="tab-btn active" onclick="switchTab('tab-phone')">📱 Vincular con Número</button>
                     <button class="tab-btn" onclick="switchTab('tab-qr')">📷 Escanear QR</button>
                 </div>
 
@@ -94,15 +105,15 @@ app.get('/', (req, res) => {
                             <button id="btnPair" onclick="requestPairing()">Vincular</button>
                         </div>
                         <div id="pairingCodeContainer" style="display: none;" class="code-display">
-                            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">TU CÓDIGO DE VINCULACIÓN:</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">CÓDIGO DE VINCULACIÓN:</div>
                             <div id="codeDisplay" class="digits">----</div>
                         </div>
                         <div class="steps">
                             <ol>
-                                <li>Ingresa tu número arriba y toca <b>Vincular</b>.</li>
+                                <li>Escribe tu número y presiona <b>Vincular</b>.</li>
                                 <li>En tu teléfono abre WhatsApp > <b>Dispositivos vinculados</b>.</li>
                                 <li>Toca <b>Vincular un dispositivo</b> > <b>Vincular con el número de teléfono</b>.</li>
-                                <li>Escribe el código de 8 caracteres que aparecerá arriba.</li>
+                                <li>Ingresa el código que aparecerá arriba.</li>
                             </ol>
                         </div>
                     </div>
@@ -110,17 +121,22 @@ app.get('/', (req, res) => {
 
                 <div id="tab-qr" class="tab-content">
                     <div id="qrBox" class="qr-box">
-                        ${qrImageBase64 ? `<img id="qrImg" src="${qrImageBase64}" alt="QR" />` : '<div style="width:220px;height:220px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">Generando código QR...</div>'}
+                        ${qrImageBase64 ? `<img id="qrImg" src="${qrImageBase64}" alt="QR" />` : '<div style="width:230px;height:230px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">Generando código QR...</div>'}
                     </div>
                     <div class="steps" style="text-align: center;">
                         Abre WhatsApp > <b>Dispositivos vinculados</b> > <b>Vincular un dispositivo</b> y apunta la cámara al código QR.
                     </div>
                 </div>
+
+                <div class="actions-bar">
+                    <button class="btn-small" onclick="resetSession()">🔄 Reiniciar sesión</button>
+                    <a class="btn-small" href="/logs" target="_blank">📋 Ver logs del servidor</a>
+                </div>
             </div>
 
             <div id="connectedArea" class="connected-view" style="display: ${isConnected ? 'block' : 'none'};">
                 <div class="connected-icon">✅</div>
-                <h2 style="color: #4ade80; font-size: 20px; margin-bottom: 8px;">¡Bot Activo y Protegido 24/7!</h2>
+                <h2 style="color: #4ade80; font-size: 20px; margin-bottom: 8px;">¡Bot Activo y Protegido en la Nube 24/7!</h2>
                 <p style="font-size: 14px; color: #94a3b8; line-height: 1.5;">
                     Cada vez que un cliente pregunte por el <b>libro de recetas</b>, <b>precio</b>, <b>abuela</b> o <b>adquirir</b>, el bot simulará 3 segundos de grabación y enviará la nota de voz nativa de 1 minuto automáticamente.
                 </p>
@@ -131,7 +147,7 @@ app.get('/', (req, res) => {
                 </div>
             </div>
 
-            <div class="footer">Render.com Cloud • Monitoreo UptimeRobot activo • Costo $0.00</div>
+            <div class="footer">Servidor Cloud 24/7 • Monitoreo UptimeRobot • Costo $0.00</div>
         </div>
 
         <script>
@@ -151,8 +167,8 @@ app.get('/', (req, res) => {
                 const phoneInput = document.getElementById('phoneNumberInput');
                 const btn = document.getElementById('btnPair');
                 const phone = phoneInput.value.replace(/[^0-9]/g, '');
-                if (!phone || phone.length < 9) {
-                    alert('Por favor ingresa un número de teléfono válido con código de país (ej: 54911xxxxxxxx).');
+                if (!phone || phone.length < 8) {
+                    alert('Ingresa un número válido con código de país (ej: 54911...).');
                     return;
                 }
                 btn.disabled = true;
@@ -171,14 +187,19 @@ app.get('/', (req, res) => {
                         alert(data.error || 'No se pudo generar el código. Intenta nuevamente.');
                     }
                 } catch(e) {
-                    alert('Error solicitando código: ' + e.message);
+                    alert('Error: ' + e.message);
                 } finally {
                     btn.disabled = false;
                     btn.innerText = 'Vincular';
                 }
             }
 
-            // Polling de estado en vivo cada 3 segundos sin recargar la página
+            async function resetSession() {
+                if (!confirm('¿Reiniciar la sesión de WhatsApp para generar un nuevo código limpio?')) return;
+                await fetch('/api/reset-session', { method: 'POST' });
+                window.location.reload();
+            }
+
             setInterval(async () => {
                 try {
                     const res = await fetch('/api/status');
@@ -201,14 +222,13 @@ app.get('/', (req, res) => {
                         }
                     }
                 } catch(e) {}
-            }, 3000);
+            }, 2500);
         </script>
     </body>
     </html>
     `);
 });
 
-// Endpoint de estado en JSON para el frontend reactivo
 app.get('/api/status', (req, res) => {
     res.json({
         status: connectionStatus,
@@ -218,7 +238,32 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// Endpoint para solicitar Pairing Code con número de teléfono
+app.get('/logs', (req, res) => {
+    res.type('text/plain').send(recentLogs.join('\n') || 'No logs yet.');
+});
+
+app.post('/api/reset-session', async (req, res) => {
+    log('[RESET] Usuario solicitó reinicio completo de sesión');
+    try {
+        if (sock) {
+            try { sock.ev.removeAllListeners(); sock.ws?.close(); } catch(e){}
+            sock = null;
+        }
+        const authFolder = path.join(__dirname, 'auth_info');
+        if (fs.existsSync(authFolder)) {
+            fs.rmSync(authFolder, { recursive: true, force: true });
+        }
+        currentQR = null;
+        qrImageBase64 = null;
+        connectionStatus = 'Sesión reiniciada. Reconectando...';
+        startWhatsApp();
+        res.json({ ok: true });
+    } catch (err) {
+        log(`[RESET ERROR] ${err.message}`);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/request-pairing-code', async (req, res) => {
     try {
         const { phone } = req.body;
@@ -227,24 +272,23 @@ app.post('/api/request-pairing-code', async (req, res) => {
             return res.status(400).json({ error: 'Número de teléfono inválido' });
         }
         if (!sock) {
-            return res.status(503).json({ error: 'El servicio de WhatsApp aún no está listo. Espera unos segundos.' });
+            return res.status(503).json({ error: 'Iniciando WhatsApp. Espera 5 segundos...' });
         }
         if (isConnected) {
-            return res.status(400).json({ error: 'WhatsApp ya está conectado.' });
+            return res.status(400).json({ error: 'Ya está conectado.' });
         }
 
-        console.log(`Solicitando código de vinculación para +${cleanPhone}...`);
+        log(`[PAIRING] Solicitando código de vinculación para +${cleanPhone}...`);
         let code = await sock.requestPairingCode(cleanPhone);
         code = code?.match(/.{1,4}/g)?.join('-') || code;
-        console.log(`Código generado exitosamente: ${code}`);
+        log(`[PAIRING] Código generado exitosamente: ${code}`);
         res.json({ ok: true, code });
     } catch (err) {
-        console.error('Error generando pairing code:', err);
+        log(`[PAIRING ERROR] ${err.message}`);
         res.status(500).json({ error: err.message || 'Error solicitando código' });
     }
 });
 
-// Preview del audio en la web
 app.get('/audio-preview', (req, res) => {
     const audioPath = path.join(__dirname, 'audio_abuela.ogg');
     if (fs.existsSync(audioPath)) {
@@ -255,7 +299,6 @@ app.get('/audio-preview', (req, res) => {
     }
 });
 
-// Health check para UptimeRobot
 app.get('/health', (req, res) => {
     res.status(200).json({
         status: 'ok',
@@ -266,10 +309,9 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor HTTP activo en puerto ${PORT}`);
+    log(`[HTTP] Servidor listo en puerto ${PORT}`);
 });
 
-// Conexión robusta de Baileys
 let reconnectTimeout = null;
 
 async function startWhatsApp() {
@@ -278,11 +320,10 @@ async function startWhatsApp() {
         reconnectTimeout = null;
     }
 
-    // Limpieza de instancia previa si existiera
     if (sock) {
         try {
             sock.ev.removeAllListeners();
-            sock.ws.close();
+            sock.ws?.close();
         } catch (e) {}
         sock = null;
     }
@@ -294,12 +335,13 @@ async function startWhatsApp() {
         }
 
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-        authState = state;
-        saveCredsFn = saveCreds;
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        log(`[BAILEYS] Versión Web: [${version.join(', ')}], isLatest: ${isLatest}`);
 
         const logger = pino({ level: 'silent' });
 
         sock = makeWASocket({
+            version,
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, logger)
@@ -309,7 +351,7 @@ async function startWhatsApp() {
             browser: Browsers.macOS('Desktop'),
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 25000,
+            keepAliveIntervalMs: 30000,
             emitOwnEvents: false,
             fireInitQueries: true
         });
@@ -323,7 +365,7 @@ async function startWhatsApp() {
                 currentQR = qr;
                 qrImageBase64 = await QRCode.toDataURL(qr, { scale: 8, margin: 2 });
                 connectionStatus = 'Escanea el código QR o pide tu código de 8 dígitos 👇';
-                console.log('Nuevo QR generado para vinculación.');
+                log('[QR] Nuevo código QR generado y listo en el dashboard');
             }
 
             if (connection === 'close') {
@@ -331,14 +373,11 @@ async function startWhatsApp() {
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 isConnected = false;
                 connectionStatus = 'Reconectando con WhatsApp...';
-                console.log(`Conexión cerrada (status ${statusCode}). Reconectando en 3s...`);
+                log(`[CONN CLOSE] Código de salida: ${statusCode}, error: ${lastDisconnect?.error?.message || 'none'}. Reconectando: ${shouldReconnect}`);
 
                 if (statusCode === DisconnectReason.loggedOut) {
-                    // Si se cerró sesión, limpiar auth para permitir nueva vinculación limpia
-                    console.log('Sesión cerrada por el usuario. Limpiando credenciales...');
-                    try {
-                        fs.rmSync(authFolder, { recursive: true, force: true });
-                    } catch (e) {}
+                    log('[LOGOUT] Limpiando credenciales para permitir nuevo login');
+                    try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
                 }
 
                 if (shouldReconnect) {
@@ -349,17 +388,17 @@ async function startWhatsApp() {
                 connectionStatus = '✅ Conectado y Listo 24/7';
                 currentQR = null;
                 qrImageBase64 = null;
-                console.log('¡Conexión abierta con WhatsApp exitosamente!');
+                log('====================================================');
+                log('¡WHATSAPP CONECTADO EXITOSAMENTE Y RESPONDIENDO 24/7!');
+                log('====================================================');
             }
         });
 
-        // Escucha de mensajes entrantes y respuesta con nota de voz
         sock.ev.on('messages.upsert', async (m) => {
             const msg = m.messages[0];
             if (!msg.message || msg.key.fromMe) return;
 
             const remoteJid = msg.key.remoteJid;
-            // No responder en grupos ni canales de difusión
             if (remoteJid.endsWith('@g.us') || remoteJid.includes('@newsletter') || remoteJid.includes('status@broadcast')) {
                 return;
             }
@@ -371,9 +410,8 @@ async function startWhatsApp() {
                 ''
             ).toLowerCase().trim();
 
-            console.log(`Mensaje recibido de ${remoteJid}: "${body}"`);
+            log(`[MSG] De ${remoteJid}: "${body}"`);
 
-            // Palabras clave de interés en el libro de recetas
             const keywords = [
                 'libro', 'receta', 'recetas', 'abuela', 'valor', 'precio',
                 'costo', 'adquirir', 'comprar', 'interesa', 'cuanto', 'cuánto',
@@ -382,14 +420,13 @@ async function startWhatsApp() {
             const matches = keywords.some(k => body.includes(k));
 
             if (matches) {
-                console.log(`Intención detectada en ${remoteJid}. Enviando nota de voz de la abuela...`);
-
+                log(`[INTENCIÓN] Mensaje coincide con intención de compra. Respondiendo...`);
                 try {
-                    // 1. Simulación realista de presencia: "grabando audio..." durante 3 segundos
+                    // Simulación realista de 3s grabando nota de voz
                     await sock.sendPresenceUpdate('recording', remoteJid);
                     await new Promise(resolve => setTimeout(resolve, 3000));
 
-                    // 2. Envío de nota de voz nativa (PTT Opus con micrófono verde)
+                    // Envío de nota de voz nativa (PTT Opus con micrófono verde)
                     const audioPath = path.join(__dirname, 'audio_abuela.ogg');
                     if (fs.existsSync(audioPath)) {
                         await sock.sendMessage(remoteJid, {
@@ -397,18 +434,16 @@ async function startWhatsApp() {
                             mimetype: 'audio/ogg; codecs=opus',
                             ptt: true
                         }, { quoted: msg });
-                        console.log(`Nota de voz entregada con éxito a ${remoteJid}`);
-                    } else {
-                        console.error('Archivo audio_abuela.ogg no encontrado.');
+                        log(`[ENVIADO] Nota de voz de 1 minuto entregada a ${remoteJid}`);
                     }
                 } catch (err) {
-                    console.error('Error al responder mensaje:', err);
+                    log(`[ERROR ENVÍO] ${err.message}`);
                 }
             }
         });
 
     } catch (err) {
-        console.error('Error inicializando WhatsApp:', err);
+        log(`[START ERROR] ${err.message}`);
         reconnectTimeout = setTimeout(startWhatsApp, 5000);
     }
 }
