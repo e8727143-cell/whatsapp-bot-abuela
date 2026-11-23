@@ -482,10 +482,29 @@ async function startWhatsApp() {
             log(`⏳ [Pausa Humana] Simulando lectura (${(delayLectura / 1000).toFixed(1)}s)...`);
             await new Promise(r => setTimeout(r, delayLectura));
 
+            // Si es un mensaje general (ej: "hola", "buenas", dudas generales) y no tiene estado previo:
+            if (!estadoActual && !esDisparador) {
+                log(`[DEEPSEEK] Mensaje general recibido de ${remoteJid}: "${body}". Respondiendo con IA...`);
+                try {
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await new Promise(r => setTimeout(r, 2000));
+
+                    const respuestaIA = await responderComoAbuela(remoteJid, body);
+                    await sock.sendMessage(remoteJid, { text: respuestaIA });
+                    log(`[ENVIADO] Respuesta DeepSeek a saludo entregada a ${remoteJid}`);
+                } catch (e) {
+                    log(`[ERROR SALUDO IA] ${e.message}`);
+                    await sock.sendMessage(remoteJid, {
+                        text: '¡Hola, hija mía! Qué alegría que me escribas. Cuéntame con confianza, ¿en qué te puedo ayudar o qué molestia tienes hoy? Te escucho con cariño. 🌿'
+                    });
+                }
+                return;
+            }
+
             // PASO 1: Mensaje inicial / Disparador -> Envía Audio 1 (Bienvenida y pregunta de salud)
             if (!estadoActual && esDisparador) {
                 log(`[EMBUDO] Disparador recibido de ${remoteJid}. Enviando Audio 1...`);
-                const textoPaso1 = 'Hola, hija mía. Qué lindo que me escribas. Antes de hablarte del libro, cuéntame... ¿qué molestia o dolorcito tienes hoy que te gustaría que aliviemos juntas? Te escucho con cariño.';
+                const textoPaso1 = 'Hola... ¿cómo estás? Qué lindo que me escribas por acá. Mira, antes de hablarte del libro... cuéntame, ¿qué dolor o qué molestia tienes hoy? Dime y te escucho con calma.';
                 let enviado = false;
 
                 try {

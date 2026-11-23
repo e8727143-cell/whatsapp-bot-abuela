@@ -119,7 +119,8 @@ async function responderComoAbuela(senderId, mensajeUsuario) {
     .replace(/\b(?:mis\s+)?reinas\b/gi, 'mis hijas')
     .replace(/\b(?:mi\s+)?reina\b/gi, 'hija mía')
     .replace(/\b(?:mis\s+)?amores\b/gi, 'mis hijas')
-    .replace(/^Ay,?\s+(?:hija\s+(?:mía|de\s+mi\s+corazón),?\s+)?/i, '')
+    .replace(/^(?:¡?Ay,?\s*(?:ay,?\s*)*)+(?:hija\s+(?:mía|de\s+mi\s+corazón),?\s*)?/i, '')
+    .replace(/^(?:¡?Ay\s+)?hija\s+(?:mía|de\s+mi\s+corazón),?\s*/i, '')
     .trim();
 
   if (textoRespuesta.length > 0) {
