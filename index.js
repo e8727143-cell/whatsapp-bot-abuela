@@ -607,7 +607,7 @@ async function startWhatsApp() {
             // PASO 2: Responde contando su dolor (texto o audio) -> Envía Audio 2 (Solución, Ebook digital, $7 USD y cierre)
             if (estadoActual === 'esperando_problema') {
                 log(`[EMBUDO] Problema recibido de ${remoteJid}: "${body}". Enviando Audio 2...`);
-                const textoPaso2 = 'Te entiendo bien, hija. Con mis recetas en letra grande vas a sanar de raíz en tu propia cocina. El libro es digital, sale solo siete dólares y te llega al instante. ¿Quieres que te pase el link?';
+                const textoPaso2 = 'Te entiendo tan bien... sé lo pesado que es vivir con esa molestia. Pero tranquila, en tu propia cocina tienes todo para aliviarte de raíz. El libro es digital, cuesta solo siete dólares y te llega al momento. ¿Quieres que te pase el enlace?';
                 let enviado = false;
 
                 try {
