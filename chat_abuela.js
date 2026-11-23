@@ -32,13 +32,18 @@ function registrarInteraccion(senderId, role, content) {
     if (!conversaciones[senderId]) {
       conversaciones[senderId] = [];
     }
+    const ult = conversaciones[senderId][conversaciones[senderId].length - 1];
+    if (ult && ult.role === role && ult.content === content) {
+      return;
+    }
     conversaciones[senderId].push({
       role,
       content,
       timestamp: new Date().toISOString()
     });
-    if (conversaciones[senderId].length > 12) {
-      conversaciones[senderId] = conversaciones[senderId].slice(-12);
+    // Conserva TODO el contexto desde el primer mensaje (hasta 100 mensajes)
+    if (conversaciones[senderId].length > 100) {
+      conversaciones[senderId] = conversaciones[senderId].slice(-100);
     }
     guardarConversaciones(conversaciones);
   } catch (e) {
@@ -110,14 +115,19 @@ async function responderComoAbuela(senderId, mensajeUsuario) {
     conversaciones[senderId] = [];
   }
 
-  conversaciones[senderId].push({
-    role: 'user',
-    content: mensajeUsuario,
-    timestamp: new Date().toISOString()
-  });
+  // Registrar el mensaje actual del usuario solo si no estaba ya registrado
+  const ult = conversaciones[senderId][conversaciones[senderId].length - 1];
+  if (!ult || ult.role !== 'user' || ult.content !== mensajeUsuario) {
+    conversaciones[senderId].push({
+      role: 'user',
+      content: mensajeUsuario,
+      timestamp: new Date().toISOString()
+    });
+  }
 
-  if (conversaciones[senderId].length > 10) {
-    conversaciones[senderId] = conversaciones[senderId].slice(-10);
+  // Todo el historial completo desde el inicio para que la IA tenga contexto absoluto
+  if (conversaciones[senderId].length > 100) {
+    conversaciones[senderId] = conversaciones[senderId].slice(-100);
   }
 
   const messagesParaApi = [

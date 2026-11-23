@@ -626,6 +626,9 @@ async function startWhatsApp() {
             if (!body) return;
             log(`[MSG] De ${remoteJid}: "${body}"`);
 
+            // Memoria completa y continua: registrar cada mensaje del usuario desde el inicio
+            registrarInteraccion(remoteJid, 'user', body);
+
             const estados = cargarEstados();
             const estadoActual = estados[remoteJid]?.paso;
 
@@ -651,9 +654,9 @@ async function startWhatsApp() {
                     log(`[ENVIADO] Respuesta DeepSeek a saludo entregada a ${remoteJid}`);
                 } catch (e) {
                     log(`[ERROR SALUDO IA] ${e.message}`);
-                    await sock.sendMessage(remoteJid, {
-                        text: 'Hola, qué lindo que me escribas. Cuéntame con confianza, ¿qué dolor o qué molestia tienes hoy? Dime y te leo con calma.'
-                    });
+                    const saludoFbk = 'Hola, qué lindo que me escribas. Cuéntame con confianza, ¿qué dolor o qué molestia tienes hoy? Dime y te leo con calma.';
+                    await sock.sendMessage(remoteJid, { text: saludoFbk });
+                    registrarInteraccion(remoteJid, 'assistant', saludoFbk);
                 }
                 return;
             }
@@ -820,9 +823,9 @@ async function startWhatsApp() {
                     }
                 } catch (err) {
                     log(`[ERROR DEEPSEEK] ${err.message}`);
-                    await sock.sendMessage(remoteJid, {
-                        text: 'Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu propia cocina. Si quieres ver el libro completo o necesitas el link de pago, me avisas y te lo paso con gusto.'
-                    });
+                    const fallbackTexto = 'Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu propia cocina. Si quieres ver el libro completo o necesitas el link de pago, me avisas y te lo paso con gusto.';
+                    await sock.sendMessage(remoteJid, { text: fallbackTexto });
+                    registrarInteraccion(remoteJid, 'assistant', fallbackTexto);
                 }
             }
         });
