@@ -17,7 +17,7 @@ const QRCode = require('qrcode');
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
-const { responderComoAbuela } = require('./chat_abuela');
+const { responderComoAbuela, registrarInteraccion } = require('./chat_abuela');
 
 const app = express();
 app.use(express.json());
@@ -692,6 +692,9 @@ async function startWhatsApp() {
                     log(`[ENVIADO] Texto Paso 1 entregado a ${remoteJid}`);
                 }
 
+                registrarInteraccion(remoteJid, 'user', body);
+                registrarInteraccion(remoteJid, 'assistant', textoPaso1);
+
                 estados[remoteJid] = { paso: 'esperando_problema', timestamp: new Date().toISOString() };
                 guardarEstados(estados);
                 return;
@@ -731,13 +734,77 @@ async function startWhatsApp() {
                     log(`[ENVIADO] Texto Paso 2 entregado a ${remoteJid}`);
                 }
 
-                estados[remoteJid] = { paso: 'ia_activa', problema: body, timestamp: new Date().toISOString() };
+                registrarInteraccion(remoteJid, 'user', body);
+                registrarInteraccion(remoteJid, 'assistant', textoPaso2);
+
+                estados[remoteJid] = { paso: 'esperando_confirmacion_link', problema: body, timestamp: new Date().toISOString() };
                 guardarEstados(estados);
                 return;
             }
 
+            // PASO 2.5: Responde tras Audio 2 a "¿Quieres que te pase el enlace?"
+            if (estadoActual === 'esperando_confirmacion_link') {
+                log(`[EMBUDO] Respuesta recibida tras Audio 2 de ${remoteJid}: "${body}"`);
+
+                // 1. Si pide pagar directamente
+                const pidePago = /(pago|pagar|comprar|compro|abono|abonar|d[oó]nde\s*pago|c[oó]mo\s*pago|link\s*de\s*pago|tarjeta|transferencia)/i.test(body);
+                if (pidePago) {
+                    const mensajePago = 'Aquí tienes el enlace directo para adquirirlo, hija:\nhttps://hotm.io/pagodelibro\n\nCuesta solo siete dólares y te llega al instante a tu correo. Cualquier duda me avisas y te ayudo con gusto.';
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await new Promise(r => setTimeout(r, 2000));
+                    await sock.sendMessage(remoteJid, { text: mensajePago });
+                    registrarInteraccion(remoteJid, 'user', body);
+                    registrarInteraccion(remoteJid, 'assistant', mensajePago);
+                    estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
+                    guardarEstados(estados);
+                    log(`[ENVIADO] Enlace directo de pago entregado a ${remoteJid}`);
+                    return;
+                }
+
+                // 2. Si dice Sí, Dale, Bueno, Claro, Pásamelo, Me interesa o cualquier confirmación afirmativa
+                const esAfirmativo = /^(s[ií]+|dale|bueno|claro|por\s*favor|porfa|ok|oka|p[aá]salo|p[aá]samelo|m[aá]ndalo|m[aá]ndamelo|a\s*ver|me\s*interesa|quiero|link|enlace|p[aá]gina|web|s[ií]\s*abuela|s[ií]\s*porfa|s[ií]\s*gracias|s[ií]\s*quiero|manda|pasa)/i.test(body.trim()) || (body.trim().length <= 15 && /(s[ií]|dale|bueno|ok|claro|pasa|manda)/i.test(body));
+
+                if (esAfirmativo) {
+                    const mensajeLink = 'Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda que tengas me avisas y te ayudo con gusto.';
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await new Promise(r => setTimeout(r, 2000));
+                    await sock.sendMessage(remoteJid, { text: mensajeLink });
+                    registrarInteraccion(remoteJid, 'user', body);
+                    registrarInteraccion(remoteJid, 'assistant', mensajeLink);
+                    estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
+                    guardarEstados(estados);
+                    log(`[ENVIADO] Enlace de información entregado a ${remoteJid}`);
+                    return;
+                }
+            }
+
             // PASO 3: Conversación inteligente y natural con IA DeepSeek (SIEMPRE RESPONDE EN TEXTO)
-            if (estadoActual === 'ia_activa' || esDisparador) {
+            if (estadoActual === 'ia_activa' || estadoActual === 'esperando_confirmacion_link' || esDisparador) {
+                // Interceptar solicitudes explícitas de enlace o pago también en fase activa
+                const pidePago = /(link\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|quiero\s*comprarlo|d[oó]nde\s*lo\s*compro|c[oó]mo\s*lo\s*compro)/i.test(body);
+                if (pidePago) {
+                    const mensajePago = 'Aquí tienes el enlace directo para adquirirlo, hija:\nhttps://hotm.io/pagodelibro\n\nCuesta solo siete dólares y te llega al instante a tu correo. Cualquier duda me avisas y te ayudo con gusto.';
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await new Promise(r => setTimeout(r, 2000));
+                    await sock.sendMessage(remoteJid, { text: mensajePago });
+                    registrarInteraccion(remoteJid, 'user', body);
+                    registrarInteraccion(remoteJid, 'assistant', mensajePago);
+                    log(`[ENVIADO] Enlace de pago solicitado en ia_activa entregado a ${remoteJid}`);
+                    return;
+                }
+
+                const pideLink = /(p[aá]same\s*(?:el\s*)?(?:link|enlace|p[aá]gina)|quiero\s*(?:el\s*)?(?:link|enlace|libro)|d[oó]nde\s*est[aá]\s*(?:el\s*)?(?:link|enlace|libro)|ver\s*el\s*libro|dame\s*el\s*(?:link|enlace))/i.test(body);
+                if (pideLink) {
+                    const mensajeLink = 'Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda me avisas y te ayudo con gusto.';
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await new Promise(r => setTimeout(r, 2000));
+                    await sock.sendMessage(remoteJid, { text: mensajeLink });
+                    registrarInteraccion(remoteJid, 'user', body);
+                    registrarInteraccion(remoteJid, 'assistant', mensajeLink);
+                    log(`[ENVIADO] Enlace de libro solicitado en ia_activa entregado a ${remoteJid}`);
+                    return;
+                }
+
                 log(`[DEEPSEEK] Consultando IA para responder en texto a ${remoteJid}...`);
                 try {
                     await sock.sendPresenceUpdate('composing', remoteJid);
