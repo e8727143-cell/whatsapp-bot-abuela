@@ -11,12 +11,33 @@ const QRCode = require('qrcode');
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
+const { responderComoAbuela } = require('./chat_abuela');
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 10000;
+
+// Rutas a los audios nativos del embudo
+const audio1Path = path.join(__dirname, 'audio_1_bienvenida.ogg');
+const audio2Path = path.join(__dirname, 'audio_2_solucion_ebook.ogg');
+const estadosPath = path.join(__dirname, 'estados_clientes.json');
+
+function cargarEstados() {
+    try {
+        if (fs.existsSync(estadosPath)) {
+            return JSON.parse(fs.readFileSync(estadosPath, 'utf-8'));
+        }
+    } catch (e) {}
+    return {};
+}
+
+function guardarEstados(data) {
+    try {
+        fs.writeFileSync(estadosPath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (e) {}
+}
 
 // Buffer de logs para diagnóstico remoto
 const recentLogs = [];
@@ -34,7 +55,7 @@ let connectionStatus = 'Iniciando conexión con WhatsApp...';
 let isConnected = false;
 let pairingCode = null;
 
-// Dashboard Web
+// Dashboard Web para Render
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -42,13 +63,13 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bot de WhatsApp - Recetas de la Abuela (Cloud 24/7)</title>
+        <title>Bot Inteligente - Abuela Tulun (Cloud 24/7)</title>
         <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0b132b; color: #f8fafc; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-            .card { background: #1c2541; border-radius: 20px; padding: 32px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4); max-width: 540px; width: 100%; border: 1px solid #3a506b; text-align: center; }
+            .card { background: #1c2541; border-radius: 20px; padding: 32px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4); max-width: 580px; width: 100%; border: 1px solid #3a506b; text-align: center; }
             h1 { font-size: 24px; margin-bottom: 8px; color: #6fffe9; font-weight: 700; }
-            .subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 20px; }
+            .subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
             .badge { display: inline-block; padding: 8px 18px; border-radius: 9999px; font-size: 14px; font-weight: 600; margin-bottom: 20px; transition: all 0.3s ease; }
             .badge.waiting { background: #fef08a; color: #854d0e; }
             .badge.connected { background: #bbf7d0; color: #166534; box-shadow: 0 0 15px rgba(74, 222, 128, 0.4); }
@@ -71,10 +92,10 @@ app.get('/', (req, res) => {
             .code-display .digits { font-size: 32px; font-weight: 800; letter-spacing: 4px; color: #6fffe9; font-family: monospace; }
             .steps { font-size: 13px; color: #cbd5e1; text-align: left; line-height: 1.6; margin-top: 14px; }
             .steps ol { padding-left: 20px; }
-            .connected-view { padding: 20px 0; }
-            .connected-icon { font-size: 64px; margin-bottom: 16px; }
-            .audio-test { margin-top: 20px; padding: 16px; background: #0b132b; border-radius: 12px; text-align: left; }
-            .audio-test p { font-size: 12px; color: #94a3b8; margin-bottom: 8px; }
+            .connected-view { padding: 10px 0; }
+            .connected-icon { font-size: 56px; margin-bottom: 12px; }
+            .audio-test { margin-top: 12px; padding: 14px; background: #0b132b; border-radius: 12px; text-align: left; border: 1px solid #3a506b; }
+            .audio-test p { font-size: 12px; color: #6fffe9; margin-bottom: 8px; font-weight: 600; }
             audio { width: 100%; height: 36px; border-radius: 8px; }
             .actions-bar { margin-top: 16px; display: flex; justify-content: center; gap: 12px; }
             .btn-small { background: #334155; border: none; color: #94a3b8; padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; text-decoration: none; }
@@ -84,8 +105,8 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="card">
-            <h1>👵 Bot de Recetas de la Abuela</h1>
-            <div class="subtitle">Servidor Render 24/7 • Respuestas Automáticas con Voz</div>
+            <h1>👵 Bot Inteligente de la Abuela Tulun</h1>
+            <div class="subtitle">Servidor Render 24/7 • IA DeepSeek V4.1 Flash + Embudo de Voz de 2 Pasos</div>
             
             <div id="statusBadge" class="badge waiting">
                 ${connectionStatus}
@@ -99,61 +120,78 @@ app.get('/', (req, res) => {
 
                 <div id="tab-phone" class="tab-content active">
                     <div class="pairing-box">
-                        <label>Tu número de WhatsApp (con código de país)</label>
+                        <label>Número con código de país (sin +, ni guiones ni espacios):</label>
                         <div class="pairing-input-row">
-                            <input id="phoneNumberInput" type="tel" placeholder="Ej: 5491123456789 o 34612345678" />
+                            <input type="text" id="phoneInput" placeholder="Ej: 59899123456 o 54911...">
                             <button id="btnPair" onclick="requestPairing()">Vincular</button>
                         </div>
-                        <div id="pairingCodeContainer" style="display: none;" class="code-display">
-                            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">CÓDIGO DE VINCULACIÓN:</div>
-                            <div id="codeDisplay" class="digits">----</div>
+                        <div id="pairingCodeArea" class="code-display" style="display: none;">
+                            <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">TU CÓDIGO DE WHATSAPP:</div>
+                            <div class="digits" id="pairingCodeDisplay">----</div>
                         </div>
-                        <div class="steps">
-                            <ol>
-                                <li>Escribe tu número y presiona <b>Vincular</b>.</li>
-                                <li>En tu teléfono abre WhatsApp > <b>Dispositivos vinculados</b>.</li>
-                                <li>Toca <b>Vincular un dispositivo</b> > <b>Vincular con el número de teléfono</b>.</li>
-                                <li>Ingresa el código que aparecerá arriba.</li>
-                            </ol>
-                        </div>
+                    </div>
+                    <div class="steps">
+                        <ol>
+                            <li>Ingresa tu número arriba y toca <strong>Vincular</strong>.</li>
+                            <li>Abre WhatsApp en tu celular > <strong>Dispositivos vinculados</strong>.</li>
+                            <li>Toca <strong>Vincular un dispositivo</strong> > <strong>Vincular con el número de teléfono</strong>.</li>
+                            <li>Escribe el código de 8 letras/números que aparecerá arriba.</li>
+                        </ol>
                     </div>
                 </div>
 
                 <div id="tab-qr" class="tab-content">
-                    <div id="qrBox" class="qr-box">
-                        ${qrImageBase64 ? `<img id="qrImg" src="${qrImageBase64}" alt="QR" />` : '<div style="width:230px;height:230px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">Generando código QR...</div>'}
+                    <div class="qr-box">
+                        <img id="qrImage" src="${qrImageBase64 || ''}" alt="Código QR de WhatsApp" style="display: ${qrImageBase64 ? 'block' : 'none'};">
+                        <div id="qrPlaceholder" style="width: 230px; height: 230px; display: ${qrImageBase64 ? 'none' : 'flex'}; align-items: center; justify-content: center; color: #64748b; font-size: 13px;">
+                            Esperando QR del servidor...
+                        </div>
                     </div>
-                    <div class="steps" style="text-align: center;">
-                        Abre WhatsApp > <b>Dispositivos vinculados</b> > <b>Vincular un dispositivo</b> y apunta la cámara al código QR.
+                    <div class="steps">
+                        <ol>
+                            <li>Abre WhatsApp en tu teléfono.</li>
+                            <li>Toca Menú (⋮) o Ajustes > <strong>Dispositivos vinculados</strong>.</li>
+                            <li>Toca <strong>Vincular dispositivo</strong> y apunta tu cámara al QR.</li>
+                        </ol>
                     </div>
-                </div>
-
-                <div class="actions-bar">
-                    <button class="btn-small" onclick="resetSession()">🔄 Reiniciar sesión</button>
-                    <a class="btn-small" href="/logs" target="_blank">📋 Ver logs del servidor</a>
                 </div>
             </div>
 
-            <div id="connectedArea" class="connected-view" style="display: ${isConnected ? 'block' : 'none'};">
-                <div class="connected-icon">✅</div>
-                <h2 style="color: #4ade80; font-size: 20px; margin-bottom: 8px;">¡Bot Activo y Protegido en la Nube 24/7!</h2>
-                <p style="font-size: 14px; color: #94a3b8; line-height: 1.5;">
-                    Cada vez que un cliente pregunte por el <b>libro de recetas</b>, <b>precio</b>, <b>abuela</b> o <b>adquirir</b>, el bot simulará 3 segundos de grabación y enviará la nota de voz nativa de 1 minuto automáticamente.
-                </p>
-
-                <div class="audio-test">
-                    <p>🎧 Nota de voz configurada (1m 4s - Opus PTT):</p>
-                    <audio controls src="/audio-preview"></audio>
+            <div id="connectedArea" style="display: ${isConnected ? 'block' : 'none'};">
+                <div class="connected-view">
+                    <div class="connected-icon">✅</div>
+                    <h3 style="color: #4ade80; margin-bottom: 12px;">¡Bot Activo con IA DeepSeek en la Nube 24/7!</h3>
+                    <p style="color: #cbd5e1; font-size: 13.5px; line-height: 1.6; margin-bottom: 16px; text-align: left;">
+                        🌿 <strong>Paso 1 (Disparador):</strong> Cuando un cliente escribe <em>«Hola Abuela, me gustaría adquirir tu libro de recetas, ¿cuál es el valor?»</em>, el bot espera 5-7 segundos (pausa humana) y envía el <strong>Audio 1 (26s)</strong> saludando e interesándose con empatía por su dolor o problema de salud (sin vender de entrada).<br><br>
+                        🌿 <strong>Paso 2 (Problema recibido):</strong> Al responder su dolor, el bot envía el <strong>Audio 2 (46s)</strong> explicando la solución natural con sus 40 años de experiencia, el valor del libro digital a $7 USD y consultando si quiere el link.<br><br>
+                        🧠 <strong>Paso 3 (IA DeepSeek):</strong> A partir de ahí entra la IA DeepSeek respondiendo en texto como la Abuela Tulun (sin frases cliché, sin muletillas repetitivas, y enviando el link solo cuando lo solicitan).
+                    </p>
+                    <div class="audio-test" style="margin-bottom: 12px;">
+                        <p>🎧 Audio 1: Bienvenida y Diagnóstico (26s - Opus PTT):</p>
+                        <audio controls src="/audio/1"></audio>
+                    </div>
+                    <div class="audio-test">
+                        <p>🎧 Audio 2: Solución Casera y Ebook Digital $7 USD (46s - Opus PTT):</p>
+                        <audio controls src="/audio/2"></audio>
+                    </div>
                 </div>
             </div>
 
-            <div class="footer">Servidor Cloud 24/7 • Monitoreo UptimeRobot • Costo $0.00</div>
+            <div class="actions-bar">
+                <button class="btn-small" onclick="location.reload()">🔄 Actualizar Estado</button>
+                <a class="btn-small" href="/logs" target="_blank">📋 Ver Registros en Vivo</a>
+            </div>
+
+            <div class="footer">
+                Servidor Cloud 24/7 • Monitoreo UptimeRobot • Costo $0.00
+            </div>
         </div>
 
         <script>
             function switchTab(tabId) {
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
                 if (tabId === 'tab-phone') {
                     document.querySelectorAll('.tab-btn')[0].classList.add('active');
                     document.getElementById('tab-phone').classList.add('active');
@@ -164,119 +202,93 @@ app.get('/', (req, res) => {
             }
 
             async function requestPairing() {
-                const phoneInput = document.getElementById('phoneNumberInput');
+                const phone = document.getElementById('phoneInput').value.trim();
                 const btn = document.getElementById('btnPair');
-                const phone = phoneInput.value.replace(/[^0-9]/g, '');
+                const codeArea = document.getElementById('pairingCodeArea');
+                const codeDisplay = document.getElementById('pairingCodeDisplay');
+
                 if (!phone || phone.length < 8) {
-                    alert('Ingresa un número válido con código de país (ej: 54911...).');
+                    alert('Por favor escribe tu número con código de país (ej: 59899123456 o 54911...)');
                     return;
                 }
+
                 btn.disabled = true;
-                btn.innerText = 'Generando...';
+                btn.innerText = 'Pidiendo código...';
+
                 try {
-                    const res = await fetch('/api/request-pairing-code', {
+                    const res = await fetch('/pair', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ phone })
                     });
                     const data = await res.json();
-                    if (data.code) {
-                        document.getElementById('codeDisplay').innerText = data.code;
-                        document.getElementById('pairingCodeContainer').style.display = 'block';
+                    if (data.ok && data.code) {
+                        codeDisplay.innerText = data.code;
+                        codeArea.style.display = 'block';
                     } else {
-                        alert(data.error || 'No se pudo generar el código. Intenta nuevamente.');
+                        alert('Error al generar código: ' + (data.error || 'Intenta de nuevo en unos segundos'));
                     }
-                } catch(e) {
-                    alert('Error: ' + e.message);
+                } catch (e) {
+                    alert('Error de conexión con el servidor: ' + e.message);
                 } finally {
                     btn.disabled = false;
                     btn.innerText = 'Vincular';
                 }
             }
 
-            async function resetSession() {
-                if (!confirm('¿Reiniciar la sesión de WhatsApp para generar un nuevo código limpio?')) return;
-                await fetch('/api/reset-session', { method: 'POST' });
-                window.location.reload();
-            }
-
+            // Polling suave para actualizar QR o estado
             setInterval(async () => {
                 try {
-                    const res = await fetch('/api/status');
+                    const res = await fetch('/status');
                     const data = await res.json();
+                    
                     const badge = document.getElementById('statusBadge');
-                    badge.innerText = data.status;
+                    badge.innerText = data.statusText;
                     
                     if (data.connected) {
                         badge.className = 'badge connected';
                         document.getElementById('notConnectedArea').style.display = 'none';
                         document.getElementById('connectedArea').style.display = 'block';
                     } else {
-                        badge.className = data.status.includes('Reconectando') ? 'badge reconnecting' : 'badge waiting';
+                        badge.className = 'badge waiting';
                         document.getElementById('notConnectedArea').style.display = 'block';
                         document.getElementById('connectedArea').style.display = 'none';
 
                         if (data.qrBase64) {
-                            const qrBox = document.getElementById('qrBox');
-                            qrBox.innerHTML = '<img id="qrImg" src="' + data.qrBase64 + '" alt="QR" />';
+                            const img = document.getElementById('qrImage');
+                            img.src = data.qrBase64;
+                            img.style.display = 'block';
+                            document.getElementById('qrPlaceholder').style.display = 'none';
                         }
                     }
-                } catch(e) {}
-            }, 2500);
+                } catch (e) {}
+            }, 4000);
         </script>
     </body>
     </html>
     `);
 });
 
-app.get('/api/status', (req, res) => {
+app.get('/status', (req, res) => {
     res.json({
-        status: connectionStatus,
         connected: isConnected,
-        hasQR: !!qrImageBase64,
+        statusText: connectionStatus,
         qrBase64: qrImageBase64
     });
 });
 
 app.get('/logs', (req, res) => {
-    res.type('text/plain').send(recentLogs.join('\n') || 'No logs yet.');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(recentLogs.slice(-150).join('\n') || 'Aún no hay logs registrados.');
 });
 
-app.post('/api/reset-session', async (req, res) => {
-    log('[RESET] Usuario solicitó reinicio completo de sesión');
-    try {
-        if (sock) {
-            try { sock.ev.removeAllListeners(); sock.ws?.close(); } catch(e){}
-            sock = null;
-        }
-        const authFolder = path.join(__dirname, 'auth_info');
-        if (fs.existsSync(authFolder)) {
-            fs.rmSync(authFolder, { recursive: true, force: true });
-        }
-        currentQR = null;
-        qrImageBase64 = null;
-        connectionStatus = 'Sesión reiniciada. Reconectando...';
-        startWhatsApp();
-        res.json({ ok: true });
-    } catch (err) {
-        log(`[RESET ERROR] ${err.message}`);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/request-pairing-code', async (req, res) => {
+app.post('/pair', async (req, res) => {
     try {
         const { phone } = req.body;
-        const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
-        if (!cleanPhone || cleanPhone.length < 8) {
-            return res.status(400).json({ error: 'Número de teléfono inválido' });
-        }
-        if (!sock) {
-            return res.status(503).json({ error: 'Iniciando WhatsApp. Espera 5 segundos...' });
-        }
-        if (isConnected) {
-            return res.status(400).json({ error: 'Ya está conectado.' });
-        }
+        if (!phone) return res.status(400).json({ error: 'Falta el número de teléfono' });
+
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        if (!sock) return res.status(503).json({ error: 'WhatsApp no está inicializado aún' });
 
         log(`[PAIRING] Solicitando código de vinculación para +${cleanPhone}...`);
         let code = await sock.requestPairingCode(cleanPhone);
@@ -289,8 +301,26 @@ app.post('/api/request-pairing-code', async (req, res) => {
     }
 });
 
-app.get('/audio-preview', (req, res) => {
-    const audioPath = path.join(__dirname, 'audio_abuela.ogg');
+app.get('/audio/1', (req, res) => {
+    if (fs.existsSync(audio1Path)) {
+        res.setHeader('Content-Type', 'audio/ogg; codecs=opus');
+        fs.createReadStream(audio1Path).pipe(res);
+    } else {
+        res.status(404).send('Audio 1 no encontrado');
+    }
+});
+
+app.get('/audio/2', (req, res) => {
+    if (fs.existsSync(audio2Path)) {
+        res.setHeader('Content-Type', 'audio/ogg; codecs=opus');
+        fs.createReadStream(audio2Path).pipe(res);
+    } else {
+        res.status(404).send('Audio 2 no encontrado');
+    }
+});
+
+app.get('/audio', (req, res) => {
+    const audioPath = fs.existsSync(audio1Path) ? audio1Path : path.join(__dirname, 'audio_abuela.ogg');
     if (fs.existsSync(audioPath)) {
         res.setHeader('Content-Type', 'audio/ogg; codecs=opus');
         fs.createReadStream(audioPath).pipe(res);
@@ -304,6 +334,7 @@ app.get('/health', (req, res) => {
         status: 'ok',
         uptime: process.uptime(),
         connected: isConnected,
+        ai: 'DeepSeek-V4.1-Flash',
         timestamp: new Date().toISOString()
     });
 });
@@ -394,6 +425,7 @@ async function startWhatsApp() {
             }
         });
 
+        // Manejador del Embudo de 2 Pasos y Chat con IA DeepSeek
         sock.ev.on('messages.upsert', async (m) => {
             const msg = m.messages[0];
             if (!msg.message || msg.key.fromMe) return;
@@ -408,36 +440,86 @@ async function startWhatsApp() {
                 msg.message.extendedTextMessage?.text ||
                 msg.message.imageMessage?.caption ||
                 ''
-            ).toLowerCase().trim();
+            ).trim();
 
+            if (!body) return;
             log(`[MSG] De ${remoteJid}: "${body}"`);
 
-            const keywords = [
-                'libro', 'receta', 'recetas', 'abuela', 'valor', 'precio',
-                'costo', 'adquirir', 'comprar', 'interesa', 'cuanto', 'cuánto',
-                'informacion', 'información', 'info', 'hola', 'buenas'
-            ];
-            const matches = keywords.some(k => body.includes(k));
+            const estados = cargarEstados();
+            const estadoActual = estados[remoteJid]?.paso;
 
-            if (matches) {
-                log(`[INTENCIÓN] Mensaje coincide con intención de compra. Respondiendo...`);
+            const esDisparador = /(adquirir|libro|receta|recetas|valor|precio|costo|comprar|cu[aá]nto|hola abuela)/i.test(body);
+
+            // 1. Pausa humana natural de 5 a 7 segundos antes de responder
+            const delayLectura = 5000 + Math.floor(Math.random() * 2500);
+            log(`⏳ [Pausa Humana] Simulando lectura (${(delayLectura / 1000).toFixed(1)}s)...`);
+            await new Promise(r => setTimeout(r, delayLectura));
+
+            // PASO 1: Mensaje inicial / Disparador -> Envía Audio 1 (Bienvenida y pregunta de salud)
+            if (!estadoActual && esDisparador) {
+                log(`[EMBUDO] Disparador recibido de ${remoteJid}. Enviando Audio 1...`);
                 try {
-                    // Simulación realista de 3s grabando nota de voz
                     await sock.sendPresenceUpdate('recording', remoteJid);
-                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    await new Promise(r => setTimeout(r, 3500));
 
-                    // Envío de nota de voz nativa (PTT Opus con micrófono verde)
-                    const audioPath = path.join(__dirname, 'audio_abuela.ogg');
-                    if (fs.existsSync(audioPath)) {
+                    if (fs.existsSync(audio1Path)) {
                         await sock.sendMessage(remoteJid, {
-                            audio: fs.readFileSync(audioPath),
+                            audio: fs.readFileSync(audio1Path),
                             mimetype: 'audio/ogg; codecs=opus',
                             ptt: true
                         }, { quoted: msg });
-                        log(`[ENVIADO] Nota de voz de 1 minuto entregada a ${remoteJid}`);
+                        log(`[ENVIADO] Audio 1 (Bienvenida/Diagnóstico) entregado a ${remoteJid}`);
+                    }
+
+                    estados[remoteJid] = { paso: 'esperando_problema', timestamp: new Date().toISOString() };
+                    guardarEstados(estados);
+                } catch (err) {
+                    log(`[ERROR PASO 1] ${err.message}`);
+                }
+                return;
+            }
+
+            // PASO 2: Responde contando su dolor -> Envía Audio 2 (Solución natural, libro digital, $7 USD y cierre)
+            if (estadoActual === 'esperando_problema') {
+                log(`[EMBUDO] Problema de salud recibido de ${remoteJid}: "${body}". Enviando Audio 2...`);
+                try {
+                    await sock.sendPresenceUpdate('recording', remoteJid);
+                    await new Promise(r => setTimeout(r, 4000));
+
+                    if (fs.existsSync(audio2Path)) {
+                        await sock.sendMessage(remoteJid, {
+                            audio: fs.readFileSync(audio2Path),
+                            mimetype: 'audio/ogg; codecs=opus',
+                            ptt: true
+                        }, { quoted: msg });
+                        log(`[ENVIADO] Audio 2 (Solución/Ebook digital) entregado a ${remoteJid}`);
+                    }
+
+                    estados[remoteJid] = { paso: 'ia_activa', problema: body, timestamp: new Date().toISOString() };
+                    guardarEstados(estados);
+                } catch (err) {
+                    log(`[ERROR PASO 2] ${err.message}`);
+                }
+                return;
+            }
+
+            // PASO 3: Conversación inteligente y natural con IA DeepSeek
+            if (estadoActual === 'ia_activa' || esDisparador) {
+                log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid}...`);
+                try {
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await new Promise(r => setTimeout(r, 3000));
+
+                    const respuestaIA = await responderComoAbuela(remoteJid, body);
+                    await sock.sendMessage(remoteJid, { text: respuestaIA }, { quoted: msg });
+                    log(`[ENVIADO] Respuesta DeepSeek enviada a ${remoteJid}`);
+
+                    if (!estados[remoteJid]) {
+                        estados[remoteJid] = { paso: 'ia_activa', timestamp: new Date().toISOString() };
+                        guardarEstados(estados);
                     }
                 } catch (err) {
-                    log(`[ERROR ENVÍO] ${err.message}`);
+                    log(`[ERROR DEEPSEEK] ${err.message}`);
                 }
             }
         });
