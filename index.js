@@ -216,16 +216,16 @@ app.get('/', (req, res) => {
                     <div class="connected-icon">✅</div>
                     <h3 style="color: #4ade80; margin-bottom: 12px;">¡Bot Activo con IA DeepSeek en la Nube 24/7!</h3>
                     <p style="color: #cbd5e1; font-size: 13.5px; line-height: 1.6; margin-bottom: 16px; text-align: left;">
-                        🌿 <strong>Paso 1 (Disparador):</strong> Cuando un cliente escribe <em>«Hola Abuela, me gustaría adquirir tu libro de recetas, ¿cuál es el valor?»</em>, el bot espera 5-7 segundos (pausa humana) y envía el <strong>Audio 1 (26s)</strong> saludando e interesándose con empatía por su dolor o problema de salud (sin vender de entrada).<br><br>
-                        🌿 <strong>Paso 2 (Problema recibido):</strong> Al responder su dolor, el bot envía el <strong>Audio 2 (46s)</strong> explicando la solución natural con sus 40 años de experiencia, el valor del libro digital a $7 USD y consultando si quiere el link.<br><br>
-                        🧠 <strong>Paso 3 (IA DeepSeek):</strong> A partir de ahí entra la IA DeepSeek respondiendo en texto como la Abuela Tulun (sin frases cliché, sin muletillas repetitivas, y enviando el link solo cuando lo solicitan).
+                        🌿 <strong>Paso 1 (Disparador):</strong> Cuando un cliente escribe <em>«Hola Abuela, me gustaría adquirir tu libro de recetas, ¿cuál es el valor?»</em>, el bot espera 5-7 segundos (pausa humana) y envía el <strong>Audio 1 (12s)</strong> saludando e interesándose con empatía por su molestia o dolor (sin vender de entrada).<br><br>
+                        🌿 <strong>Paso 2 (Problema recibido):</strong> Al responder su dolor (por texto o nota de voz), el bot envía el <strong>Audio 2 (16s)</strong> con comprensión cálida, explicando que puede sanar en su cocina, el libro digital a $7 USD y consultando si quiere el link.<br><br>
+                        🧠 <strong>Paso 3 (IA DeepSeek + Transcripción de Audios):</strong> Conversación natural y cercana. Si el cliente envía notas de voz, el bot las transcribe automáticamente y le responde a lo que dijo, sin frases cliché y enviando el link solo cuando lo piden.
                     </p>
                     <div class="audio-test" style="margin-bottom: 12px;">
-                        <p>🎧 Audio 1: Bienvenida y Diagnóstico (26s - Opus PTT):</p>
+                        <p>🎧 Audio 1: Bienvenida empática y pregunta de salud (12s - Opus PTT):</p>
                         <audio controls src="/audio/1"></audio>
                     </div>
                     <div class="audio-test">
-                        <p>🎧 Audio 2: Solución Casera y Ebook Digital $7 USD (46s - Opus PTT):</p>
+                        <p>🎧 Audio 2: Solución natural en cocina y Ebook digital $7 USD (16s - Opus PTT):</p>
                         <audio controls src="/audio/2"></audio>
                     </div>
                 </div>
