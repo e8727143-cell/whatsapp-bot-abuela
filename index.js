@@ -9,7 +9,8 @@ const {
     DisconnectReason,
     Browsers,
     makeCacheableSignalKeyStore,
-    fetchLatestBaileysVersion
+    fetchLatestBaileysVersion,
+    downloadContentFromMessage
 } = require('@whiskeysockets/baileys');
 const express = require('express');
 const QRCode = require('qrcode');
@@ -51,6 +52,50 @@ function log(msg) {
     console.log(entry);
     recentLogs.push(entry);
     if (recentLogs.length > 300) recentLogs.shift();
+}
+
+/**
+ * Transcribe un audio de WhatsApp (formato OGG Opus) palabra por palabra a texto en español.
+ * Utiliza la API multimodal ultrarrápida de Gemini Flash.
+ */
+async function transcribirAudioConGemini(audioBuffer) {
+    try {
+        const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyBnt8_IUnbEA1d3cgCqYTQTOel89nlUsUU';
+        const base64Audio = audioBuffer.toString('base64');
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: 'Transcribe exactamente todo lo que dice esta persona en su nota de voz de WhatsApp, palabra por palabra en español. Devuelve únicamente el texto transcrito sin comillas, explicaciones ni comentarios adicionales.' },
+                        {
+                            inlineData: {
+                                mimeType: 'audio/ogg',
+                                data: base64Audio
+                            }
+                        }
+                    ]
+                }]
+            })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            const transcripcion = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (transcripcion && transcripcion.length > 0) {
+                return transcripcion;
+            }
+        } else {
+            const errText = await res.text();
+            log(`⚠️ [GEMINI STT ERROR] HTTP ${res.status}: ${errText.slice(0, 150)}`);
+        }
+    } catch (e) {
+        log(`⚠️ [GEMINI STT EXCEPCION] ${e.message}`);
+    }
+    return null;
 }
 
 let sock = null;
@@ -459,12 +504,36 @@ async function startWhatsApp() {
             const messageContent = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
             const esAudio = Boolean(messageContent?.audioMessage);
 
-            const body = (
+            let body = (
                 messageContent?.conversation ||
                 messageContent?.extendedTextMessage?.text ||
                 messageContent?.imageMessage?.caption ||
-                (esAudio ? '[nota de voz recibida]' : '')
+                ''
             ).trim();
+
+            if (esAudio) {
+                log(`🎙️ [AUDIO RECIBIDO] Descargando nota de voz de ${remoteJid}...`);
+                try {
+                    const stream = await downloadContentFromMessage(messageContent.audioMessage, 'audio');
+                    let audioBuffer = Buffer.from([]);
+                    for await (const chunk of stream) {
+                        audioBuffer = Buffer.concat([audioBuffer, chunk]);
+                    }
+
+                    log(`🔄 [TRANSCRIBIENDO AUDIO] (${audioBuffer.length} bytes)...`);
+                    const textoTranscrito = await transcribirAudioConGemini(audioBuffer);
+                    if (textoTranscrito && textoTranscrito.length > 0) {
+                        body = textoTranscrito;
+                        log(`✅ [TRANSCRIPCIÓN EXITOSA] De ${remoteJid}: "${body}"`);
+                    } else {
+                        body = 'Hola abuela, te mandé un audio con dudas sobre mis dolores y cómo sanar.';
+                        log(`ℹ️ [TRANSCRIPCIÓN VACÍA] Usando contexto de audio de salud.`);
+                    }
+                } catch (errAudio) {
+                    log(`⚠️ [ERROR AL DESCARGAR/TRANSCRIBIR AUDIO] ${errAudio.message}`);
+                    body = 'Hola abuela, te envié una nota de voz con mis dudas de salud.';
+                }
+            }
 
             if (!body) return;
             log(`[MSG] De ${remoteJid}: "${body}"`);
@@ -495,7 +564,7 @@ async function startWhatsApp() {
                 } catch (e) {
                     log(`[ERROR SALUDO IA] ${e.message}`);
                     await sock.sendMessage(remoteJid, {
-                        text: '¡Hola, hija mía! Qué alegría que me escribas. Cuéntame con confianza, ¿en qué te puedo ayudar o qué molestia tienes hoy? Te escucho con cariño. 🌿'
+                        text: 'Hola, qué lindo que me escribas. Cuéntame con confianza, ¿qué dolor o qué molestia tienes hoy? Dime y te escucho con calma.'
                     });
                 }
                 return;
@@ -576,8 +645,7 @@ async function startWhatsApp() {
                     await sock.sendPresenceUpdate('composing', remoteJid);
                     await new Promise(r => setTimeout(r, 2000));
 
-                    const textoParaIA = esAudio ? 'Hola abuela, te envié un audio contándote mis dudas de salud y del libro.' : body;
-                    const respuestaIA = await responderComoAbuela(remoteJid, textoParaIA);
+                    const respuestaIA = await responderComoAbuela(remoteJid, body);
                     await sock.sendMessage(remoteJid, { text: respuestaIA });
                     log(`[ENVIADO] Respuesta DeepSeek enviada a ${remoteJid}`);
 
@@ -588,7 +656,7 @@ async function startWhatsApp() {
                 } catch (err) {
                     log(`[ERROR DEEPSEEK] ${err.message}`);
                     await sock.sendMessage(remoteJid, {
-                        text: 'Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu cocina. Si quieres ver el libro completo en letra grande, puedes verlo aquí: https://abuelatulun.site 💛'
+                        text: 'Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu propia cocina. Si quieres ver el libro completo en letra grande, me avisas y te paso el enlace.'
                     });
                 }
             }
