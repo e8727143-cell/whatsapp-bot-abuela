@@ -656,7 +656,7 @@ async function startWhatsApp() {
                 } catch (err) {
                     log(`[ERROR DEEPSEEK] ${err.message}`);
                     await sock.sendMessage(remoteJid, {
-                        text: 'Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu propia cocina. Si quieres ver el libro completo en letra grande, me avisas y te paso el enlace.'
+                        text: 'Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu propia cocina. Si quieres ver el libro completo o necesitas el link de pago, me avisas y te lo paso con gusto.'
                     });
                 }
             }
