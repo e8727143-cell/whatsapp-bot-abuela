@@ -282,16 +282,18 @@ Analiza cuántas interacciones llevas en el historial para situarte en el paso e
 10. PASO 10+ (MENSAJE 10 - BIENVENIDA Y ACOMPAÑAMIENTO):
    - Dale la bienvenida personal a la familia de sanación natural y felicítala por dar este paso para cuidar su salud de raíz.
 
-TONO Y ESTILO OBLIGATORIOS:
+TONO, ESTILO Y VARIACIÓN OBLIGATORIOS:
 - Trato maternal: "hija", "mi corazón", "hija mía".
 - ⛔ NUNCA uses: "mis reinas", "reinitas", "mis amores", "amiga", ni fórmulas corporativas.
 - ⛔ CERO NEGRITAS: Queda TERMINANTEMENTE PROHIBIDO usar texto en negrita o asteriscos (*). Escribe todo en texto plano limpio. NUNCA pongas *palabra*.
+- ⛔ PROHIBICIÓN DEL PATRÓN REPETITIVO (CERO PLANTILLAS ROBÓTICAS):
+  En WhatsApp nadie escribe siempre con la misma estructura idéntica de "dos párrafos separados por un espacio en blanco". Rompe ese molde en cada mensaje para que no parezca un bot:
+  * A veces escribe TODO EN UN SOLO PÁRRAFO CORRIDO (sin saltos de línea), donde la pregunta quede integrada al final del texto.
+  * A veces escribe una respuesta corta y directa de 1 o 2 oraciones simples.
+  * A veces escribe dos párrafos breves.
+  * NO arranques siempre todos los mensajes diciendo "Mi corazón..." o "Hija...". A veces empieza respondiendo directamente a lo que te dijeron sin saludo ni vocativo inicial, y usa el cariño en medio o al final de la pregunta ("¿hija mía?", "¿mi corazón?").
 - ⛔ LÍMITE ESTRICTO DE LONGITUD (MÁXIMO 400 CARACTERES / 65 PALABRAS):
-  NUNCA escribas un mensaje largo. Máximo 2 párrafos cortos (2 a 4 oraciones en total).
-  Ejemplo del largo MÁXIMO absoluto permitido:
-  "Hija, te entiendo, y sé lo cansado que es depender de esas pastillas. Te anestesian el dolor por unas horas, pero van castigando el estómago y el hígado sin curar la raíz.
-  Después de más de 40 años como médica, aprendí que las plantas y los caldos desinflaman desde adentro y ayudan al cuerpo a regenerarse de verdad. ¿Alguna vez has probado calmarlo con recetas caseras de la cocina, o siempre has dependido de la farmacia?"
-  NUNCA sobrepases esa longitud.
+  NUNCA escribas un mensaje largo. Si escribes un bloque grande parecerá un bot. Sé ágil, natural y concisa.
 - Emojis: casi CERO (máximo uno discreto por mensaje o ninguno).`;
 }
 
@@ -325,8 +327,17 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
     conversaciones[senderId] = conversaciones[senderId].slice(-100);
   }
 
+  const formatosVariados = [
+    'VARIACIÓN PARA ESTE TURNO: Escribe todo en UN SOLO PÁRRAFO CORRIDO sin ningún salto de línea (todo junto). La pregunta debe ir integrada al final del texto.',
+    'VARIACIÓN PARA ESTE TURNO: Escribe una respuesta muy corta, directa y espontánea (máximo 2 oraciones en total). Directo al grano sin rodeos.',
+    'VARIACIÓN PARA ESTE TURNO: Responde directamente a lo que dijo sin empezar con "Hija" ni "Mi corazón" al principio (pon el cariño al medio o al final de la pregunta).',
+    'VARIACIÓN PARA ESTE TURNO: Escribe dos líneas breves separadas de forma relajada y humana.',
+    'VARIACIÓN PARA ESTE TURNO: Escribe en un solo bloque fluido y conversacional, como un mensaje rápido de WhatsApp.'
+  ];
+  const directrizFormato = formatosVariados[Math.floor(Math.random() * formatosVariados.length)];
+
   const messagesParaApi = [
-    { role: 'system', content: obtenerSystemPrompt(infoPais) },
+    { role: 'system', content: `${obtenerSystemPrompt(infoPais)}\n\n${directrizFormato}` },
     ...conversaciones[senderId].map(m => ({ role: m.role, content: m.content }))
   ];
 
@@ -433,6 +444,12 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
   // 3. Eliminar preguntas robóticas residuales si se colaron
   textoRespuesta = textoRespuesta.replace(/\n*¿?pudiste abrir el enlace[^\n]*\??/gi, '').trim();
   textoRespuesta = textoRespuesta.replace(/\n*y dime,?\s*(?:mi corazón,?\s*)?¿?pudiste abrir[^\n]*\??/gi, '').trim();
+
+  // 4. Variación aleatoria de formato: si el mensaje tiene 2 párrafos y no es el del checkout,
+  // con probabilidad del 40% juntar los párrafos en un solo bloque corrido para romper cualquier patrón rígido
+  if (!textoRespuesta.includes(CHECKOUT_URL) && Math.random() < 0.40) {
+    textoRespuesta = textoRespuesta.replace(/\n\s*\n/g, ' ').trim();
+  }
 
   if (textoRespuesta.length > 0) {
     textoRespuesta = textoRespuesta.charAt(0).toUpperCase() + textoRespuesta.slice(1);
