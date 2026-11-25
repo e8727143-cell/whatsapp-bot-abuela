@@ -266,18 +266,18 @@ Analiza cuántas interacciones llevas en el historial para situarte en el paso e
      * Dale el precio EXACTO oficial en su moneda local: ${precioTexto}.
      * Menciona sus facilidades de pago locales (${metodosTexto}).
      * Entrega ÚNICAMENTE el enlace directo de pago seguro:
-       🔒 Acceso con pago seguro: ${pagoUrl}
+       Acceso con pago seguro: ${pagoUrl}
      * (⛔ Recuerda: CERO mención a la palabra Hotmart y CERO mención a abuelatulun.site).
-   - Pregunta inductiva hacia la acción:
-     👉 Ejemplo: "¿Pudiste abrir el enlace o quieres que te ayude a ver cuál es el medio de pago más fácil para ti en tu país, mi corazón?"
+     * ⛔ REGLA ESTRICTA DE FIN DE MENSAJE: Este mensaje termina EXACTAMENTE en el enlace. Queda TERMINANTEMENTE PROHIBIDO poner preguntas o texto después del enlace (NUNCA pongas "¿Pudiste abrir el enlace...?"). Solo el valor, facilidades y el enlace, nada más.
 
-9. PASO 9 (MENSAJE 9 - MANEJO DE DUDAS Y GARANTÍA TOTAL DE 7 DÍAS):
+9. PASO 9 (MENSAJE 9 - RESPUESTAS A DUDAS Y PREGUNTAS POSTERIORES):
+   - Si la persona te pregunta algo general (como de dónde eres, cómo te llamas, de qué trata):
+     * Responde con amor, cercanía y de forma natural a lo que preguntó.
+     * ⛔ PROHIBIDO VOLVER A PREGUNTAR DE FORMA ROBÓTICA "¿pudiste abrir el enlace?" o "¿pudiste hacer la compra?". No insistas con el enlace a menos que la persona pregunte directamente sobre el pago o el libro.
    - Si tiene dudas de seguridad, de si le llega al celular o de cómo pagar:
-     * Dale absoluta tranquilidad: cuenta con *7 días de garantía incondicional total* (si no siente mejoría, pide la devolución y se le regresa el 100% de su dinero sin hacer preguntas).
+     * Dale absoluta tranquilidad: cuenta con 7 días de garantía incondicional total (si no siente mejoría, pide la devolución y se le regresa el 100% de su dinero sin hacer preguntas).
      * Le llega de inmediato a su correo y celular para leerlo al momento o imprimirlo.
      * (⛔ Recuerda: CERO mención a la palabra Hotmart).
-   - Pregunta inductiva:
-     👉 Ejemplo: "¿Quieres que te espere en línea mientras completas tu pedido para asegurarme de que te llegue todo bien a tu correo?"
 
 10. PASO 10+ (MENSAJE 10 - BIENVENIDA Y ACOMPAÑAMIENTO):
    - Dale la bienvenida personal a la familia de sanación natural y felicítala por dar este paso para cuidar su salud de raíz.
@@ -285,9 +285,14 @@ Analiza cuántas interacciones llevas en el historial para situarte en el paso e
 TONO Y ESTILO OBLIGATORIOS:
 - Trato maternal: "hija", "mi corazón", "hija mía".
 - ⛔ NUNCA uses: "mis reinas", "reinitas", "mis amores", "amiga", ni fórmulas corporativas.
-- Longitud: 2 a 4 oraciones bien hiladas (máximo 50-60 palabras por mensaje). En WhatsApp se conversa de forma ágil y relajada.
-- Emojis: casi CERO (máximo uno discreto por mensaje o ninguno).
-- Negritas: utiliza solo un asterisco para resaltar palabras clave (*texto*).`;
+- ⛔ CERO NEGRITAS: Queda TERMINANTEMENTE PROHIBIDO usar texto en negrita o asteriscos (*). Escribe todo en texto plano limpio. NUNCA pongas *palabra*.
+- ⛔ LÍMITE ESTRICTO DE LONGITUD (MÁXIMO 400 CARACTERES / 65 PALABRAS):
+  NUNCA escribas un mensaje largo. Máximo 2 párrafos cortos (2 a 4 oraciones en total).
+  Ejemplo del largo MÁXIMO absoluto permitido:
+  "Hija, te entiendo, y sé lo cansado que es depender de esas pastillas. Te anestesian el dolor por unas horas, pero van castigando el estómago y el hígado sin curar la raíz.
+  Después de más de 40 años como médica, aprendí que las plantas y los caldos desinflaman desde adentro y ayudan al cuerpo a regenerarse de verdad. ¿Alguna vez has probado calmarlo con recetas caseras de la cocina, o siempre has dependido de la farmacia?"
+  NUNCA sobrepases esa longitud.
+- Emojis: casi CERO (máximo uno discreto por mensaje o ninguno).`;
 }
 
 /**
@@ -397,7 +402,6 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
 
   // Filtros de naturalidad y seguridad
   textoRespuesta = textoRespuesta
-    .replace(/\*\*(.*?)\*\*/g, '*$1*')
     .replace(/\b(?:mis\s+)?reinas\b/gi, 'mis hijas')
     .replace(/\b(?:mi\s+)?reina\b/gi, 'hija mía')
     .replace(/\b(?:mis\s+)?amores\b/gi, 'mis hijas')
@@ -406,7 +410,7 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
     .trim();
 
   // Limpieza de emojis excesivos: no usar emojis todo el tiempo
-  textoRespuesta = textoRespuesta.replace(/[🌿👵✨💛🌸❤️🤍]/gu, '').trim();
+  textoRespuesta = textoRespuesta.replace(/[🌿👵✨💛🌸❤️🤍🔒]/gu, '').trim();
 
   // Garantía de que nunca se mencione Hotmart en el texto (protegiendo el enlace oficial de checkout)
   const placeholderUrl = '___CHECKOUT_URL_SAFE___';
@@ -414,6 +418,21 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
   textoRespuesta = textoRespuesta.replace(/\bhotmart\b/gi, 'pago seguro');
   textoRespuesta = textoRespuesta.replace(new RegExp(placeholderUrl, 'g'), CHECKOUT_URL);
   textoRespuesta = textoRespuesta.replace(/https?:\/\/(?:www\.)?abuelatulun\.site\S*/gi, CHECKOUT_URL);
+
+  // 1. Cero negritas obligatorio: eliminar absolutamente todos los asteriscos (*)
+  textoRespuesta = textoRespuesta.replace(/\*/g, '').trim();
+
+  // 2. Si el mensaje contiene el enlace de pago seguro, cortar TODO texto que venga después del enlace
+  if (textoRespuesta.includes(CHECKOUT_URL)) {
+    const urlIdx = textoRespuesta.indexOf(CHECKOUT_URL);
+    if (urlIdx !== -1) {
+      textoRespuesta = textoRespuesta.substring(0, urlIdx + CHECKOUT_URL.length).trim();
+    }
+  }
+
+  // 3. Eliminar preguntas robóticas residuales si se colaron
+  textoRespuesta = textoRespuesta.replace(/\n*¿?pudiste abrir el enlace[^\n]*\??/gi, '').trim();
+  textoRespuesta = textoRespuesta.replace(/\n*y dime,?\s*(?:mi corazón,?\s*)?¿?pudiste abrir[^\n]*\??/gi, '').trim();
 
   if (textoRespuesta.length > 0) {
     textoRespuesta = textoRespuesta.charAt(0).toUpperCase() + textoRespuesta.slice(1);
@@ -434,5 +453,6 @@ module.exports = {
   obtenerSystemPrompt,
   registrarInteraccion,
   obtenerInfoPais,
+  cargarConversaciones,
   CHECKOUT_URL
 };

@@ -17,7 +17,7 @@ const QRCode = require('qrcode');
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
-const { responderComoAbuela, registrarInteraccion, obtenerInfoPais } = require('./chat_abuela');
+const { responderComoAbuela, registrarInteraccion, obtenerInfoPais, cargarConversaciones } = require('./chat_abuela');
 const { restaurarSesionDesdeNube, guardarSesionEnNube, borrarSesionEnNube } = require('./session_storage');
 
 const app = express();
@@ -544,20 +544,37 @@ async function startWhatsApp() {
             if (!body) return;
             log(`[MSG] De ${remoteJid}: "${body}"`);
 
+            // Cargar historial previo para saber si es el PRIMER mensaje del usuario
+            const conversacionesPrevias = cargarConversaciones();
+            const historialUsuario = conversacionesPrevias[remoteJid] || [];
+            const esPrimerMensaje = historialUsuario.filter(m => m.role === 'assistant').length === 0;
+
             // Memoria completa y continua: registrar cada mensaje del usuario desde el inicio
             registrarInteraccion(remoteJid, 'user', body);
 
             // Detección automática de país, moneda y medios de pago por prefijo telefónico o texto
             const infoPais = obtenerInfoPais(remoteJid, body);
 
-            // 1. Pausa humana natural simulando lectura (2.5 a 4.5 segundos)
-            const delayLectura = 2500 + Math.floor(Math.random() * 2000);
-            log(`⏳ [Pausa Humana] Simulando lectura (${(delayLectura / 1000).toFixed(1)}s)...`);
-            await new Promise(r => setTimeout(r, delayLectura));
+            // Pausa humana natural: Primer mensaje de 6 a 10s, mensajes siguientes de 15 a 20s
+            let tiempoTotalEspera;
+            let tiempoComposing;
 
-            // Indicador de "escribiendo..." en WhatsApp
+            if (esPrimerMensaje) {
+                // Primer mensaje: entre 6 y 10 segundos
+                tiempoTotalEspera = 6000 + Math.floor(Math.random() * 4000);
+                tiempoComposing = Math.min(3000, Math.floor(tiempoTotalEspera * 0.4));
+            } else {
+                // Mensajes siguientes: entre 15 y 20 segundos
+                tiempoTotalEspera = 15000 + Math.floor(Math.random() * 5000);
+                tiempoComposing = Math.min(5000, Math.floor(tiempoTotalEspera * 0.3));
+            }
+
+            const tiempoPausaLectura = tiempoTotalEspera - tiempoComposing;
+            log(`⏳ [Espera Humana] ${esPrimerMensaje ? 'PRIMER MENSAJE (6-10s)' : 'MENSAJE SIGUIENTE (15-20s)'}: Total ${(tiempoTotalEspera / 1000).toFixed(1)}s (Pausa: ${(tiempoPausaLectura / 1000).toFixed(1)}s, Escribiendo: ${(tiempoComposing / 1000).toFixed(1)}s)...`);
+
+            await new Promise(r => setTimeout(r, tiempoPausaLectura));
             await sock.sendPresenceUpdate('composing', remoteJid);
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, tiempoComposing));
 
             // Conversación estratégica con la IA (DeepSeek): razonamiento, interpretación natural y embudo de copy
             log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid} (${infoPais.pais}): "${body}"...`);
