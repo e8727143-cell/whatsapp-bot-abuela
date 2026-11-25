@@ -170,9 +170,10 @@ app.get('/', (req, res) => {
             .steps ol { padding-left: 20px; }
             .connected-view { padding: 10px 0; }
             .connected-icon { font-size: 56px; margin-bottom: 12px; }
-            .audio-test { margin-top: 12px; padding: 14px; background: #0b132b; border-radius: 12px; text-align: left; border: 1px solid #3a506b; }
-            .audio-test p { font-size: 12px; color: #6fffe9; margin-bottom: 8px; font-weight: 600; }
-            audio { width: 100%; height: 36px; border-radius: 8px; }
+            .funnel-info { margin-top: 14px; padding: 16px; background: #0b132b; border-radius: 12px; text-align: left; border: 1px solid #3a506b; }
+            .funnel-info h4 { font-size: 13px; color: #6fffe9; margin-bottom: 10px; font-weight: 700; }
+            .funnel-info ul { list-style: none; padding: 0; margin: 0; }
+            .funnel-info li { font-size: 12.5px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.5; }
             .actions-bar { margin-top: 16px; display: flex; justify-content: center; gap: 12px; }
             .btn-small { background: #334155; border: none; color: #94a3b8; padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; text-decoration: none; }
             .btn-small:hover { background: #475569; color: white; }
@@ -182,7 +183,7 @@ app.get('/', (req, res) => {
     <body>
         <div class="card">
             <h1>👵 Bot Inteligente de la Abuela Tulun</h1>
-            <div class="subtitle">Servidor Render 24/7 • IA DeepSeek V4.1 Flash + Embudo de Voz de 2 Pasos</div>
+            <div class="subtitle">Servidor Render 24/7 • Conversación 100% con IA DeepSeek • Cierre en Hotmart</div>
             
             <div id="statusBanner" style="padding: 14px 18px; border-radius: 12px; font-weight: 700; font-size: 15px; margin-bottom: 20px; transition: all 0.3s ease; background: ${isConnected ? '#064e3b' : '#7f1d1d'}; color: ${isConnected ? '#34d399' : '#fca5a5'}; border: 1px solid ${isConnected ? '#059669' : '#dc2626'};">
                 ${isConnected ? '🟢 WHATSAPP CONECTADO Y EN LÍNEA 24/7 (EL BOT ESTÁ RESPONDIENDO)' : '🔴 WHATSAPP DESCONECTADO (VINCULA TU WHATSAPP ABAJO PARA ACTIVARLO)'}
@@ -240,19 +241,18 @@ app.get('/', (req, res) => {
             <div id="connectedArea" style="display: ${isConnected ? 'block' : 'none'};">
                 <div class="connected-view">
                     <div class="connected-icon">✅</div>
-                    <h3 style="color: #4ade80; margin-bottom: 12px;">¡Bot Activo con IA DeepSeek en la Nube 24/7!</h3>
-                    <p style="color: #cbd5e1; font-size: 13.5px; line-height: 1.6; margin-bottom: 16px; text-align: left;">
-                        🌿 <strong>Paso 1 (Disparador):</strong> Cuando un cliente escribe <em>«Hola Abuela, me gustaría adquirir tu libro de recetas, ¿cuál es el valor?»</em>, el bot espera 5-7 segundos (pausa humana) y envía el <strong>Audio 1 (12s)</strong> saludando e interesándose con empatía por su molestia o dolor (sin vender de entrada).<br><br>
-                        🌿 <strong>Paso 2 (Problema recibido):</strong> Al responder su dolor (por texto o nota de voz), el bot envía el <strong>Audio 2 (16s)</strong> con comprensión cálida, explicando que puede sanar en su cocina, el libro digital a $7 USD y consultando si quiere el link.<br><br>
-                        🧠 <strong>Paso 3 (IA DeepSeek + Transcripción de Audios):</strong> Conversación natural y cercana. Si el cliente envía notas de voz, el bot las transcribe automáticamente y le responde a lo que dijo, sin frases cliché y enviando el link solo cuando lo piden.
-                    </p>
-                    <div class="audio-test" style="margin-bottom: 12px;">
-                        <p>🎧 Audio 1: Bienvenida empática y pregunta de salud (12s - Opus PTT):</p>
-                        <audio controls src="/audio/1"></audio>
-                    </div>
-                    <div class="audio-test">
-                        <p>🎧 Audio 2: Solución natural en cocina y Ebook digital $7 USD (16s - Opus PTT):</p>
-                        <audio controls src="/audio/2"></audio>
+                    <h3 style="color: #4ade80; margin-bottom: 12px;">¡Bot Activo con IA DeepSeek 24/7!</h3>
+                    <div class="funnel-info">
+                        <h4>🌿 Estrategia Conversacional 100% IA Activa:</h4>
+                        <ul>
+                            <li>• <strong>Cero Audios Salientes:</strong> Respuestas ágiles por texto simulando tipeo humano real.</li>
+                            <li>• <strong>Empatía y Salud Primero:</strong> Conecta primero con el dolor del cliente sin forzar la venta.</li>
+                            <li>• <strong>Personalidad Genuina:</strong> Abuela Griselda (mexicana en Uruguay) con tono cálido y familiar.</li>
+                            <li>• <strong>Moneda Local Automática:</strong> Detecta el país del cliente y cotiza con precio físico de anclaje.</li>
+                            <li>• <strong>Enlace de Pago Seguro:</strong> Entrega el checkout directo de Hotmart solo cuando el cliente lo pide.</li>
+                            <li>• <strong>Seguimiento Post-Link:</strong> Envía mensaje de asistencia separado tras 3 segundos.</li>
+                            <li>• <strong>Transcripción de Voz:</strong> Si el cliente envía nota de voz, Whisper la transcribe y la IA le responde por texto.</li>
+                        </ul>
                     </div>
                 </div>
             </div>
