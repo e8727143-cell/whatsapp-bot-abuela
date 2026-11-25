@@ -17,7 +17,7 @@ const QRCode = require('qrcode');
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
-const { responderComoAbuela, registrarInteraccion, obtenerInfoPais, cargarConversaciones } = require('./chat_abuela');
+const { responderComoAbuela, registrarInteraccion, obtenerInfoPais, cargarConversaciones, inicializarMemoriaNube } = require('./chat_abuela');
 const { restaurarSesionDesdeNube, guardarSesionEnNube, borrarSesionEnNube } = require('./session_storage');
 
 const app = express();
@@ -426,8 +426,9 @@ async function startWhatsApp() {
             fs.mkdirSync(authFolder, { recursive: true });
         }
 
-        // 1. Restaurar sesión previa de la nube si existe (Upstash Redis / MongoDB Atlas)
+        // 1. Restaurar sesión previa y memoria de conversaciones desde la nube (Upstash Redis / MongoDB)
         await restaurarSesionDesdeNube(authFolder);
+        await inicializarMemoriaNube();
 
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
         const { version, isLatest } = await fetchLatestBaileysVersion();
@@ -494,111 +495,127 @@ async function startWhatsApp() {
             }
         });
 
-        // Manejador del Embudo de 2 Pasos y Chat con IA DeepSeek
-        sock.ev.on('messages.upsert', async (m) => {
-            const msg = m.messages[0];
-            if (!msg.message || msg.key.fromMe) return;
+        const colasUsuarios = {};
 
-            const remoteJid = msg.key.remoteJid;
-            if (remoteJid.includes('@newsletter') || remoteJid.includes('status@broadcast')) {
-                return;
-            }
-
-            const esGrupo = remoteJid.endsWith('@g.us');
-
-            // Desempaquetar contenido de mensaje efímero o normal
-            const messageContent = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
-            const esAudio = Boolean(messageContent?.audioMessage);
-
-            let body = (
-                messageContent?.conversation ||
-                messageContent?.extendedTextMessage?.text ||
-                messageContent?.imageMessage?.caption ||
-                ''
-            ).trim();
-
-            if (esAudio) {
-                log(`🎙️ [AUDIO RECIBIDO] Descargando nota de voz de ${remoteJid}...`);
-                try {
-                    const stream = await downloadContentFromMessage(messageContent.audioMessage, 'audio');
-                    let audioBuffer = Buffer.from([]);
-                    for await (const chunk of stream) {
-                        audioBuffer = Buffer.concat([audioBuffer, chunk]);
-                    }
-
-                    log(`🔄 [TRANSCRIBIENDO AUDIO CON WHISPER] (${audioBuffer.length} bytes)...`);
-                    const textoTranscrito = await transcribirAudioConWhisper(audioBuffer);
-                    if (textoTranscrito && textoTranscrito.length > 0) {
-                        body = textoTranscrito;
-                        log(`✅ [TRANSCRIPCIÓN WHISPER EXITOSA] De ${remoteJid}: "${body}"`);
-                    } else {
-                        body = 'Hola abuela, tengo molestias y dolores en el cuerpo, ¿qué remedios caseros me recomiendas para sanar?';
-                        log(`ℹ️ [FALLBACK CONTEXTO SALUD] No se pudo transcribir, inyectando duda de salud.`);
-                    }
-                } catch (errAudio) {
-                    log(`⚠️ [ERROR AL DESCARGAR/TRANSCRIBIR AUDIO] ${errAudio.message}`);
-                    body = 'Hola abuela, tengo molestias y dolores en el cuerpo, ¿qué remedios caseros me recomiendas para sanar?';
-                }
-            }
-
-            if (!body) return;
-            log(`[MSG] De ${remoteJid}: "${body}"`);
-
-            // Cargar historial previo para saber si es el PRIMER mensaje del usuario
+        async function procesarMensajeEntrante(remoteJid, body) {
             const conversacionesPrevias = cargarConversaciones();
             const historialUsuario = conversacionesPrevias[remoteJid] || [];
             const esPrimerMensaje = historialUsuario.filter(m => m.role === 'assistant').length === 0;
 
-            // Memoria completa y continua: registrar cada mensaje del usuario desde el inicio
+            // Registrar en memoria de inmediato para preservar el orden y contexto exacto
             registrarInteraccion(remoteJid, 'user', body);
 
-            // Detección automática de país, moneda y medios de pago por prefijo telefónico o texto
-            const infoPais = obtenerInfoPais(remoteJid, body);
-
-            // Pausa humana natural: Primer mensaje de 6 a 10s, mensajes siguientes de 15 a 20s
-            let tiempoTotalEspera;
-            let tiempoComposing;
-
-            if (esPrimerMensaje) {
-                // Primer mensaje: entre 6 y 10 segundos
-                tiempoTotalEspera = 6000 + Math.floor(Math.random() * 4000);
-                tiempoComposing = Math.min(3000, Math.floor(tiempoTotalEspera * 0.4));
+            if (!colasUsuarios[remoteJid]) {
+                colasUsuarios[remoteJid] = {
+                    mensajesPendientes: [body],
+                    timer: null
+                };
             } else {
-                // Mensajes siguientes: entre 15 y 20 segundos
-                tiempoTotalEspera = 15000 + Math.floor(Math.random() * 5000);
-                tiempoComposing = Math.min(5000, Math.floor(tiempoTotalEspera * 0.3));
+                colasUsuarios[remoteJid].mensajesPendientes.push(body);
+                log(`📥 [ACUMULANDO CONTEXTO] ${remoteJid} mandó otro mensaje: "${body}" (total acumulados: ${colasUsuarios[remoteJid].mensajesPendientes.length})`);
+                return; // Ya hay un temporizador activo para responder a todo junto
             }
 
-            const tiempoPausaLectura = tiempoTotalEspera - tiempoComposing;
-            log(`⏳ [Espera Humana] ${esPrimerMensaje ? 'PRIMER MENSAJE (6-10s)' : 'MENSAJE SIGUIENTE (15-20s)'}: Total ${(tiempoTotalEspera / 1000).toFixed(1)}s (Pausa: ${(tiempoPausaLectura / 1000).toFixed(1)}s, Escribiendo: ${(tiempoComposing / 1000).toFixed(1)}s)...`);
+            // Tiempos humanos con presencia visual rápida:
+            // Primer mensaje: ~6 a 8s total (2s pausa + 4-6s escribiendo)
+            // Mensajes siguientes: ~11 a 15s total (3s pausa + 8-12s escribiendo)
+            // Así el usuario ve "escribiendo..." casi de inmediato (a los 2-3s) y nunca siente que la IA no responde
+            const tiempoTotal = esPrimerMensaje
+                ? Math.floor(6000 + Math.random() * 2500)
+                : Math.floor(11000 + Math.random() * 4000);
 
-            await new Promise(r => setTimeout(r, tiempoPausaLectura));
-            await sock.sendPresenceUpdate('composing', remoteJid);
-            await new Promise(r => setTimeout(r, tiempoComposing));
+            const tiempoPausaLectura = esPrimerMensaje ? 2000 : 3000;
+            const tiempoComposing = tiempoTotal - tiempoPausaLectura;
 
-            // Conversación estratégica con la IA (DeepSeek): razonamiento, interpretación natural y embudo de copy
-            log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid} (${infoPais.pais}): "${body}"...`);
-            try {
-                const respuestaIA = await responderComoAbuela(remoteJid, body, infoPais);
-                await sock.sendMessage(remoteJid, { text: respuestaIA });
-                log(`[ENVIADO] Respuesta enviada a ${remoteJid}`);
-
-                // Si el mensaje enviado contiene el link de pago seguro, esperar 3 segundos y enviar mensaje separado de apoyo
-                if (respuestaIA.includes('pay.hotmart.com')) {
-                    log(`⏳ [Pausa 3s] Esperando 3 segundos para enviar mensaje separado de seguimiento post-link...`);
-                    await new Promise(r => setTimeout(r, 3000));
+            colasUsuarios[remoteJid].timer = setTimeout(async () => {
+                try {
+                    log(`⏳ [Presencia WhatsApp] Mostrando "escribiendo..." durante ${(tiempoComposing / 1000).toFixed(1)}s a ${remoteJid}...`);
                     await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 1500));
-                    const mensajeApoyo = `Cualquier duda que tengas al entrar me avisas por aquí mismo, mi corazón, y te voy guiando con mucho gusto.`;
-                    await sock.sendMessage(remoteJid, { text: mensajeApoyo });
-                    registrarInteraccion(remoteJid, 'assistant', mensajeApoyo);
-                    log(`[ENVIADO] Mensaje separado de seguimiento post-link enviado a ${remoteJid}`);
+                    await new Promise(r => setTimeout(r, tiempoComposing));
+
+                    const todosLosMensajes = colasUsuarios[remoteJid]?.mensajesPendientes || [body];
+                    const textoConsolidado = todosLosMensajes.join('\n');
+                    const infoPais = obtenerInfoPais(remoteJid, textoConsolidado);
+
+                    log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid} (${infoPais.pais}). Contexto: "${textoConsolidado}"...`);
+                    const respuestaIA = await responderComoAbuela(remoteJid, textoConsolidado, infoPais);
+
+                    await sock.sendMessage(remoteJid, { text: respuestaIA });
+                    log(`[ENVIADO] Respuesta enviada a ${remoteJid}`);
+
+                    // Si el mensaje enviado contiene el link de pago seguro, enviar mensaje separado de apoyo tras 3s
+                    if (respuestaIA.includes('pay.hotmart.com')) {
+                        log(`⏳ [Pausa 3s] Esperando 3 segundos para enviar mensaje separado de seguimiento post-link...`);
+                        await new Promise(r => setTimeout(r, 3000));
+                        await sock.sendPresenceUpdate('composing', remoteJid);
+                        await new Promise(r => setTimeout(r, 1500));
+                        const mensajeApoyo = `Cualquier duda que tengas al entrar me avisas por aquí mismo, mi corazón, y te voy guiando con mucho gusto.`;
+                        await sock.sendMessage(remoteJid, { text: mensajeApoyo });
+                        registrarInteraccion(remoteJid, 'assistant', mensajeApoyo);
+                        log(`[ENVIADO] Mensaje separado de seguimiento post-link enviado a ${remoteJid}`);
+                    }
+                } catch (err) {
+                    log(`[ERROR DEEPSEEK] ${err.message}`);
+                    const fallbackTexto = `Hola mi corazón, se me cortó un momentito la señal. Cuéntame con confianza qué molestia es la que más te está pesando hoy para orientarte bien.`;
+                    await sock.sendMessage(remoteJid, { text: fallbackTexto });
+                    registrarInteraccion(remoteJid, 'assistant', fallbackTexto);
+                } finally {
+                    delete colasUsuarios[remoteJid];
                 }
-            } catch (err) {
-                log(`[ERROR DEEPSEEK] ${err.message}`);
-                const fallbackTexto = `Hola mi corazón, se me cortó un momentito la señal. Cuéntame con confianza qué dolor o molestia es la que más te está pesando hoy para orientarte bien.`;
-                await sock.sendMessage(remoteJid, { text: fallbackTexto });
-                registrarInteraccion(remoteJid, 'assistant', fallbackTexto);
+            }, tiempoPausaLectura);
+        }
+
+        // Manejador de mensajes entrantes de WhatsApp con soporte de acumulación y contexto completo
+        sock.ev.on('messages.upsert', async (m) => {
+            if (!m.messages || m.messages.length === 0) return;
+
+            for (const msg of m.messages) {
+                if (!msg.message || msg.key.fromMe) continue;
+
+                const remoteJid = msg.key.remoteJid;
+                if (!remoteJid || remoteJid.includes('@newsletter') || remoteJid.includes('status@broadcast') || remoteJid.endsWith('@g.us')) {
+                    continue;
+                }
+
+                // Desempaquetar contenido de mensaje efímero o normal
+                const messageContent = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
+                const esAudio = Boolean(messageContent?.audioMessage);
+
+                let body = (
+                    messageContent?.conversation ||
+                    messageContent?.extendedTextMessage?.text ||
+                    messageContent?.imageMessage?.caption ||
+                    ''
+                ).trim();
+
+                if (esAudio) {
+                    log(`🎙️ [AUDIO RECIBIDO] Descargando nota de voz de ${remoteJid}...`);
+                    try {
+                        const stream = await downloadContentFromMessage(messageContent.audioMessage, 'audio');
+                        let audioBuffer = Buffer.from([]);
+                        for await (const chunk of stream) {
+                            audioBuffer = Buffer.concat([audioBuffer, chunk]);
+                        }
+
+                        log(`🔄 [TRANSCRIBIENDO AUDIO CON WHISPER] (${audioBuffer.length} bytes)...`);
+                        const textoTranscrito = await transcribirAudioConWhisper(audioBuffer);
+                        if (textoTranscrito && textoTranscrito.length > 0) {
+                            body = textoTranscrito;
+                            log(`✅ [TRANSCRIPCIÓN WHISPER EXITOSA] De ${remoteJid}: "${body}"`);
+                        } else {
+                            body = 'Hola abuela, tengo molestias y dolores en el cuerpo, ¿qué remedios caseros me recomiendas para sanar?';
+                            log(`ℹ️ [FALLBACK CONTEXTO SALUD] No se pudo transcribir, inyectando duda de salud.`);
+                        }
+                    } catch (errAudio) {
+                        log(`⚠️ [ERROR AL DESCARGAR/TRANSCRIBIR AUDIO] ${errAudio.message}`);
+                        body = 'Hola abuela, tengo molestias y dolores en el cuerpo, ¿qué remedios caseros me recomiendas para sanar?';
+                    }
+                }
+
+                if (!body) continue;
+                log(`[MSG] De ${remoteJid}: "${body}"`);
+
+                procesarMensajeEntrante(remoteJid, body);
             }
         });
 

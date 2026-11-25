@@ -189,8 +189,111 @@ async function borrarSesionEnNube() {
   } catch (e) {}
 }
 
+let saveConvTimeout = null;
+
+/**
+ * Guarda el historial completo de conversaciones en la nube (Upstash Redis o MongoDB) de forma debounced.
+ */
+function guardarConversacionesEnNube(conversaciones) {
+  if (saveConvTimeout) clearTimeout(saveConvTimeout);
+
+  saveConvTimeout = setTimeout(async () => {
+    const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+    const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+    const mongoUri = process.env.MONGODB_URI;
+
+    if (!upstashUrl && !mongoUri) return;
+
+    try {
+      const payload = JSON.stringify(conversaciones);
+
+      // 1. Upstash Redis
+      if (upstashUrl && upstashToken) {
+        await fetch(`${upstashUrl}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${upstashToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(['SET', 'whatsapp_conversaciones', payload])
+        });
+        console.log(`💾 [MEMORIA NUBE] ${Object.keys(conversaciones).length} chats respaldados en Upstash Redis.`);
+      }
+
+      // 2. MongoDB Atlas
+      if (mongoUri) {
+        if (!mongodbClient) {
+          const { MongoClient } = require('mongodb');
+          mongodbClient = new MongoClient(mongoUri);
+          await mongodbClient.connect();
+        }
+        const col = mongodbClient.db().collection('whatsapp_memory');
+        await col.updateOne(
+          { _id: 'conversaciones' },
+          { $set: { data: payload, updatedAt: new Date() } },
+          { upsert: true }
+        );
+        console.log(`💾 [MEMORIA NUBE] Chats respaldados en MongoDB Atlas.`);
+      }
+    } catch (e) {
+      console.warn('⚠️ [MEMORIA NUBE] Error al guardar historial en la nube:', e.message);
+    }
+  }, 2000);
+}
+
+/**
+ * Restaura el historial completo de conversaciones desde la nube (Upstash Redis o MongoDB).
+ */
+async function restaurarConversacionesDesdeNube() {
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const mongoUri = process.env.MONGODB_URI;
+
+  if (upstashUrl && upstashToken) {
+    try {
+      console.log('🔄 [MEMORIA NUBE] Recuperando historial de conversaciones desde Upstash Redis...');
+      const res = await fetch(`${upstashUrl}/get/whatsapp_conversaciones`, {
+        headers: { Authorization: `Bearer ${upstashToken}` }
+      });
+      if (res.ok) {
+        const body = await res.json();
+        if (body.result) {
+          const parsed = typeof body.result === 'string' ? JSON.parse(body.result) : body.result;
+          console.log(`✅ [MEMORIA NUBE] ¡Historial de conversaciones restaurado desde Upstash! (${Object.keys(parsed).length} chats en memoria)`);
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ [MEMORIA NUBE] Error al restaurar desde Upstash Redis:', e.message);
+    }
+  }
+
+  if (mongoUri) {
+    try {
+      const { MongoClient } = require('mongodb');
+      if (!mongodbClient) {
+        mongodbClient = new MongoClient(mongoUri);
+        await mongodbClient.connect();
+      }
+      const col = mongodbClient.db().collection('whatsapp_memory');
+      const doc = await col.findOne({ _id: 'conversaciones' });
+      if (doc && doc.data) {
+        const parsed = typeof doc.data === 'string' ? JSON.parse(doc.data) : doc.data;
+        console.log(`✅ [MEMORIA NUBE] ¡Historial de conversaciones restaurado desde MongoDB! (${Object.keys(parsed).length} chats en memoria)`);
+        return parsed;
+      }
+    } catch (e) {
+      console.warn('⚠️ [MEMORIA NUBE] Error al restaurar desde MongoDB:', e.message);
+    }
+  }
+
+  return null;
+}
+
 module.exports = {
   restaurarSesionDesdeNube,
   guardarSesionEnNube,
-  borrarSesionEnNube
+  borrarSesionEnNube,
+  guardarConversacionesEnNube,
+  restaurarConversacionesDesdeNube
 };

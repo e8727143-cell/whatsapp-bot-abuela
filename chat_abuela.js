@@ -7,6 +7,25 @@ const CHECKOUT_URL = process.env.PAGO_URL || 'https://pay.hotmart.com/W105526885
 // Memoria en memoria (cache de ejecución) y en disco
 const memoriaCache = {};
 
+let memoriaNubeCargada = false;
+
+async function inicializarMemoriaNube() {
+  if (memoriaNubeCargada) return;
+  memoriaNubeCargada = true;
+  try {
+    const { restaurarConversacionesDesdeNube } = require('./session_storage');
+    const datosNube = await restaurarConversacionesDesdeNube();
+    if (datosNube && typeof datosNube === 'object') {
+      Object.assign(memoriaCache, datosNube);
+      try {
+        fs.writeFileSync(CONVERSACIONES_PATH, JSON.stringify(memoriaCache, null, 2), 'utf-8');
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.warn('⚠️ [MEMORIA NUBE] No se pudo inicializar memoria remota:', e.message);
+  }
+}
+
 function cargarConversaciones() {
   try {
     if (Object.keys(memoriaCache).length > 0) {
@@ -27,6 +46,8 @@ function guardarConversaciones(data) {
   try {
     Object.assign(memoriaCache, data);
     fs.writeFileSync(CONVERSACIONES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    const { guardarConversacionesEnNube } = require('./session_storage');
+    guardarConversacionesEnNube(data);
   } catch (e) {
     console.error('❌ Error al guardar conversaciones.json:', e.message);
   }
@@ -182,6 +203,13 @@ PRINCIPIO SUPREMO: NATURALIDAD, FLUIDEZ Y ADAPTABILIDAD HUMANA
   * Si te hace una broma, ríete o síguele la corriente con simpatía.
   * Si te desvía la charla o pregunta cosas de tu vida (de dónde eres, tu familia, el clima), responde con frescura y naturalidad humana. NO fuerces el tema del libro si no viene al caso.
 - Cero frases cliché, cero discursos de venta y cero preguntas forzadas. No todos los mensajes necesitan terminar en pregunta; a veces una reflexión cálida o un comentario breve se siente mucho más humano.
+
+COMPRENSIÓN TOTAL DEL CONTEXTO Y MENSAJES ANTERIORES:
+- Lee y ten en cuenta SIEMPRE todo el historial de la conversación.
+- Si la persona envió varios mensajes seguidos, o si algún mensaje anterior quedó pendiente, o si de repente cambia de tema (por ejemplo, venían hablando de dinero o del libro y luego te cuenta de otro síntoma como urgencia urinaria, riñones, digestión o articulaciones):
+  * Entiende todo el cuadro completo sin ignorar nada de lo que te dijo.
+  * Responde con empatía conectando con naturalidad lo nuevo con lo que venían hablando, sin dejar preguntas en el aire.
+  * Como médica de 40 años, dale siempre tranquilidad y orientación cercana ante cualquier dolor o molestia que mencione.
 
 DATOS OFICIALES Y CONDICIONES (PARA CUANDO LLEGUE EL MOMENTO NATURAL):
 - País detectado: ${paisDetectado}
@@ -384,5 +412,6 @@ module.exports = {
   registrarInteraccion,
   obtenerInfoPais,
   cargarConversaciones,
+  inicializarMemoriaNube,
   CHECKOUT_URL
 };
