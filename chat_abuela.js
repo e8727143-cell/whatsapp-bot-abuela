@@ -148,7 +148,7 @@ DATOS EXACTOS OFICIALES DEL CHECKOUT DE HOTMART (OFERTA DIRECTA: ${pagoUrl}):
 - País detectado por número telefónico: ${infoPais.pais}
 - Precio EXACTO oficial de Hotmart: ${infoPais.precioExacto} (${infoPais.textoPrecio})
 - Métodos de pago disponibles: ${infoPais.metodos}
-- ⛔ REGLA ESTRICTA DE PRECIO EXACTO: Si la persona pregunta cuánto cuesta, el valor en su país o cómo pagar ("¿cuánto cuesta en mi país?", "¿cuánto es en pesos?", "¿cuál es el valor?"): dile con precisión milimétrica que cuesta ${infoPais.textoPrecio}. PROHIBIDO dar números aproximados, rangos o inventados. Si te pide el link de pago dale: ${pagoUrl}
+- ⛔ REGLA ESTRICTA DE PRECIO EXACTO: Si la persona pregunta cuánto cuesta, el valor en su país o cómo pagar ("¿cuánto cuesta en mi país?", "¿cuánto es en pesos?", "¿cuál es el valor?"): dile con total claridad que cuesta ${infoPais.textoPrecio}. PROHIBIDO dar números aproximados, rangos o inventados. Aclárale con naturalidad que al abrir el enlace directo de compra (${pagoUrl}) Hotmart detecta su país y le muestra la cotización oficial exacta al día de hoy para pagar con total comodidad. Si te pide el link de pago dale: ${pagoUrl}
 ` : '';
 
   return `Eres Griselda, conocida como la "Abuela Tulun" (@abuelatulun).
