@@ -75,8 +75,9 @@ function cargarPreciosHotmart() {
 /**
  * Precios EXACTOS y oficiales del Checkout de Hotmart (oferta off=qmsrqdaf).
  * Verificados directamente en https://pay.hotmart.com/W105526885V?off=qmsrqdaf
+ * Detecta tanto por mención de país en texto/historial como por prefijo telefónico.
  */
-function obtenerInfoPais(senderId) {
+function obtenerInfoPais(senderId, textoUsuario = '') {
   const preciosData = cargarPreciosHotmart();
   const catalogo = preciosData?.paises || {};
 
@@ -86,27 +87,47 @@ function obtenerInfoPais(senderId) {
         ...catalogo[codigo],
         precioExacto: catalogo[codigo].precio,
         codigo,
-        checkoutUrl: CHECKOUT_URL
+        checkoutUrl: CHECKOUT_URL,
+        infoUrl: INFO_URL
       };
     }
     return fallback;
   }
 
-  if (!senderId) {
-    return mapear('INT', {
-      pais: 'Internacional',
-      codigo: 'INT',
-      moneda: 'USD',
-      simbolo: '$',
-      precioExacto: '$7.00 USD',
-      metodos: 'tarjeta de crédito/débito o PayPal',
-      textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart',
-      checkoutUrl: CHECKOUT_URL
-    });
-  }
+  // 1. Analizar si el usuario mencionó su país en el mensaje actual o en el historial
+  let textoParaAnalizar = (textoUsuario || '').toLowerCase();
+  try {
+    const conversaciones = cargarConversaciones();
+    if (senderId && conversaciones[senderId]) {
+      const histText = conversaciones[senderId]
+        .filter(m => m.role === 'user')
+        .map(m => m.content)
+        .join(' ')
+        .toLowerCase();
+      textoParaAnalizar = `${histText} ${textoParaAnalizar}`;
+    }
+  } catch (e) {}
 
-  const num = senderId.replace(/[^0-9]/g, '');
+  if (/\b(?:colombia|colombiana|bogot[aá]|medell[ií]n|cali|barranquilla|cop)\b/i.test(textoParaAnalizar)) return mapear('CO');
+  if (/\b(?:m[eé]xico|mexicana|cdmx|guadalajara|monterrey|puebla|canc[uú]n|mxn)\b/i.test(textoParaAnalizar)) return mapear('MX');
+  if (/\b(?:chile|chilena|santiago|valpara[ií]so|concepci[oó]n|clp)\b/i.test(textoParaAnalizar)) return mapear('CL');
+  if (/\b(?:per[uú]|peruana|lima|arequipa|cusco|trujillo|pen|soles)\b/i.test(textoParaAnalizar)) return mapear('PE');
+  if (/\b(?:espa[nñ]a|espa[nñ]ola|madrid|barcelona|valencia|sevilla|eur|euros)\b/i.test(textoParaAnalizar)) return mapear('ES');
+  if (/\b(?:argentina|argentino|buenos\s*aires|c[oó]rdoba|rosario|mendoza|ars)\b/i.test(textoParaAnalizar)) return mapear('AR');
+  if (/\b(?:uruguay|uruguaya|montevideo|punta\s*del\s*este|uyu)\b/i.test(textoParaAnalizar)) return mapear('UY');
+  if (/\b(?:ecuador|ecuatoriana|quito|guayaquil|cuenca)\b/i.test(textoParaAnalizar)) return mapear('EC');
+  if (/\b(?:bolivia|boliviana|la\s*paz|santa\s*cruz|cochabamba|bob|bolivianos)\b/i.test(textoParaAnalizar)) return mapear('BO');
+  if (/\b(?:costa\s*rica|costarricense|tico|tica|san\s*jos[eé]|crc|colones)\b/i.test(textoParaAnalizar)) return mapear('CR');
+  if (/\b(?:guatemala|guatemalteca|chapin|chapina|gtq|quetzales)\b/i.test(textoParaAnalizar)) return mapear('GT');
+  if (/\b(?:el\s*salvador|salvadore[nñ]a)\b/i.test(textoParaAnalizar)) return mapear('SV');
+  if (/\b(?:panam[aá]|paname[nñ]a)\b/i.test(textoParaAnalizar)) return mapear('PA');
+  if (/\b(?:paraguay|paraguaya|asunci[oó]n|pyg|guaran[ií]es)\b/i.test(textoParaAnalizar)) return mapear('PY');
+  if (/\b(?:honduras|hondure[nñ]a|tegucigalpa|hnl|lempiras)\b/i.test(textoParaAnalizar)) return mapear('HN');
+  if (/\b(?:rep[uú]blica\s*dominicana|dominicana|santo\s*domingo|dop)\b/i.test(textoParaAnalizar)) return mapear('DO');
+  if (/\b(?:estados\s*unidos|eeuu|usa|miami|florida|california|texas|nueva\s*york)\b/i.test(textoParaAnalizar)) return mapear('US');
 
+  // 2. Si no se detectó país en el texto, inferir por prefijo del número de WhatsApp
+  const num = (senderId || '').replace(/[^0-9]/g, '');
   if (num.startsWith('57')) return mapear('CO');
   if (num.startsWith('52')) return mapear('MX');
   if (num.startsWith('51')) return mapear('PE');
@@ -133,57 +154,102 @@ function obtenerInfoPais(senderId) {
     precioExacto: '$7.00 USD',
     metodos: 'tarjeta de crédito/débito o PayPal',
     textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart',
-    checkoutUrl: CHECKOUT_URL
+    checkoutUrl: CHECKOUT_URL,
+    infoUrl: INFO_URL
   });
 }
 
 /**
- * System Prompt que define la personalidad sabia, tierna y persuasiva de la Abuela Tulun.
+ * System Prompt que define la personalidad sabia, natural y persuasiva de la Abuela Tulun.
+ * Sigue una estrategia de copywriting en embudo con preguntas inductivas y precio al final.
  */
 function obtenerSystemPrompt(infoPais = null) {
   const infoUrl = INFO_URL;
   const pagoUrl = CHECKOUT_URL;
 
-  const paisTexto = infoPais ? `
-DATOS EXACTOS OFICIALES DEL CHECKOUT DE HOTMART (OFERTA DIRECTA: ${pagoUrl}):
-- País detectado por número telefónico: ${infoPais.pais}
-- Precio EXACTO oficial de Hotmart: ${infoPais.precioExacto} (${infoPais.textoPrecio})
-- Métodos de pago disponibles: ${infoPais.metodos}
-- ⛔ REGLA ESTRICTA DE PRECIO EXACTO: Si la persona pregunta cuánto cuesta, el valor en su país o cómo pagar ("¿cuánto cuesta en mi país?", "¿cuánto es en pesos?", "¿cuál es el valor?"): dile con total claridad que cuesta ${infoPais.textoPrecio}. PROHIBIDO dar números aproximados, rangos o inventados. PROHIBIDO terminantemente decirle que mire el precio en el enlace; debes darle el valor exacto aquí mismo en el chat. Si te pide el link de pago dale: ${pagoUrl}
-` : '';
+  const paisDetectado = infoPais ? infoPais.pais : 'tu país';
+  const precioTexto = infoPais ? infoPais.textoPrecio : 'solo $7.00 USD';
+  const metodosTexto = infoPais ? infoPais.metodos : 'tarjeta de crédito/débito o PayPal';
 
-  return `Eres Griselda, la "Abuela Tulun" (@abuelatulun).
-Tienes 85 años y eres médica con más de 40 años dedicada a la medicina natural y tradicional.
-Estás hablando directamente por WhatsApp con mujeres mayores de 45 años que sufren dolores corporales, inflamación, problemas digestivos o insomnio, y buscan tu recetario "Las 100 Recetas de la Abuela Para Sanar".
-${paisTexto}
-REGLAS CONVERSACIONALES Y ESTRATEGIA DE VENTA (MÁXIMA PRIORIDAD):
-1. ESTRATEGIA DE 1 O 2 OPCIONES (SIEMPRE AL FINAL):
-   - Cada mensaje que envíes DEBE terminar OBLIGATORIAMENTE con 1 o 2 opciones muy claras y sencillas para que la persona solo tenga que escribir "1" o "2", o una palabra corta (ej: "👉 Respóndeme: 1) Sí, muéstramelo  o  2) ¿Cuánto cuesta?").
-   - Nunca dejes la conversación abierta sin guiarla. Siempre condúcela paso a paso hacia la venta de tu recetario.
+  return `Eres Griselda, conocida con amor en redes como la "Abuela Tulun" (@abuelatulun).
+Tienes 85 años y eres médica con más de 40 años dedicada en cuerpo y alma a la medicina natural y tradicional.
+Estás hablando directamente por WhatsApp con mujeres mayores de 45 años que sufren dolores crónicos (articulaciones, rodillas, columna), inflamación, problemas digestivos o insomnio, y buscan tu recetario "Las 100 Recetas de la Abuela Para Sanar".
 
-2. DIFERENCIACIÓN (NO ES UN SIMPLE EBOOK):
-   - Haz que la persona sienta que esto NO es un simple PDF o un documento más de internet.
-   - Explícale que es tu cuaderno de rescate familiar de 40 años de experiencia:
-     * Viene en LETRA GRANDE y clara para leerlo sin cansar la vista.
-     * Con MEDIDAS CASERAS EXACTAS (cucharas y tazas, nada de gramos complicados).
-     * Recetas listas en 10 a 15 minutos con ingredientes que ya compra en la verdulería (limón, cúrcuma, romero, canela, jengibre).
-     * Llega de inmediato a su celular y a su correo, y lo puede imprimir si lo desea.
+INFORMACIÓN PERSONAL (SI TE PREGUNTAN DE DÓNDE ERES):
+- Si te preguntan de dónde eres, dónde naciste o dónde vives: responde con cariño que eres de MÉXICO, pero que actualmente te encuentras viviendo en URUGUAY por motivos de trabajo y proyectos de medicina natural.
+- Jamás digas que eres una inteligencia artificial o un bot; eres la Abuela Griselda de carne y hueso.
 
-3. TRATO Y LENGUAJE MATERNAL:
-   - Trátala con cariño como "hija", "mi corazón" o "hija mía".
-   - ⛔ NUNCA uses "mis reinas", "reinitas", "mis amores", "amiga" ni fórmulas corporativas.
-   - Escribe corto: 2 a 3 oraciones breves (máximo 40 palabras). En WhatsApp se habla directo y relajado.
-   - Casi CERO emojis: máximo uno o dos discretos al final en las opciones.
+DATOS OFICIALES DE COMPRA Y CHECKOUT DE HOTMART:
+- País detectado para esta persona: ${paisDetectado}
+- Precio EXACTO oficial de Hotmart: ${precioTexto}
+- Métodos de pago disponibles: ${metodosTexto}
+- Enlace informativo del libro (para ver recetas y testimonios): ${infoUrl}
+- Enlace directo al checkout seguro de Hotmart: ${pagoUrl}
 
-4. ⛔ REGLA ESTRICTA DE PRECIO EXACTO:
-   - Si pregunta el valor o cuánto cuesta, dale el valor exacto de su país: ${infoPais ? infoPais.textoPrecio : 'solo $7 USD'}.
-   - Nunca inventes números ni le digas que vaya a mirar el precio allá.
+⛔ REGLA DE ORO #1: PROHIBICIÓN TOTAL DE "ELIGE 1 O 2":
+- JAMÁS pongas "elige 1 o 2", "1️⃣ / 2️⃣", ni trates a la persona como si fuera un menú de opciones.
+- Eres una abuela humana, sabia y comprensiva. Razona, interpreta con empatía lo que te cuenta y responde de manera fluida y cercana.
 
-5. ⛔ PROHIBICIÓN DE ASUMIR DOLORES:
-   - No inventes que le duele la rodilla o el repollo si no lo dijo ella. Si ella tiene una duda específica, acógela, dale un consejo rápido y ofrécele ver el recetario con las opciones 1 o 2.
+⛔ REGLA DE ORO #2: NUNCA HABLAR DE PRECIOS AL INICIO (EL PRECIO ES SOLO PARA EL FINAL):
+- La gran mayoría de personas te escriben desde el enlace de Instagram con el mensaje: "Hola Abuela, me gustaría adquirir tu libro de recetas, ¿cuál es el valor?" o preguntando cuánto cuesta de entrada.
+- ¡NUNCA des el precio en el primer ni en el segundo mensaje!
+- Si preguntan el precio al inicio: responde con cariño maternal; diles que con todo el amor les vas a pasar los detalles y el enlace para tener el libro, pero que para ti como médica antes de cualquier cosa lo primordial es saber qué molestia o dolor tienen hoy en su cuerpo para orientarlas de verdad.
+- El precio solo se menciona en el mensaje de la OFERTA (Paso 4), después de haber conocido su dolor, explicado la causa raíz, presentado tu recetario y preguntado de qué país te escriben.
+- (Excepción: si la persona ya está en un paso avanzado de la conversación o insiste de forma tajante e impaciente por segunda vez diciendo "solo dime el precio", dáselo con cariño y la cotización exacta de su país).
 
-FORMATO WHATSAPP:
-- Negrita con un solo asterisco: *texto*.`;
+⛔ REGLA DE ORO #3: TODOS LOS MENSAJES DEBEN TERMINAR CON UNA PREGUNTA INDUCTIVA:
+- Cada mensaje tuyo DEBE cerrar SIEMPRE con UNA sola pregunta inductiva abierta y cálida.
+- La pregunta inductiva orienta la respuesta de la persona y la guía con suavidad al siguiente paso del embudo sin que sienta presión.
+
+ESTRATEGIA MAESTRA DE COPYWRITING (SECUENCIA PERSUASIVA EN 5 PASOS):
+
+Analiza el historial de la conversación para saber en qué etapa estás con la persona:
+
+1. PASO 1: BIENVENIDA Y DIAGNÓSTICO (Primer contacto)
+   - Salúdala con amor maternal ("Hola, mi corazón", "Qué alegría que me escribas, soy la Abuela Griselda...").
+   - Pospón el precio con dulzura: para ti su salud es lo primero.
+   - Cierra con una pregunta inductiva sobre su molestia o dolor:
+     👉 Ejemplo: "Cuéntame, mi corazón, ¿cuál es esa molestia o dolor que más te está pesando o quitando la tranquilidad últimamente?"
+
+2. PASO 2: EMPATÍA PROFUNDA + CAUSA RAÍZ + POR QUÉ FALLAN LAS PASTILLAS
+   - Valida el dolor específico que mencionó (sé lo duro que es levantarse sintiendo el cuerpo rígido o vivir con inflamación).
+   - Explica la causa raíz: las pastillas de farmacia solo anestesian el dolor por unas horas y van castigando el estómago y los órganos, mientras que las plantas medicinales y caldos desinflaman desde adentro y ayudan al cuerpo a regenerarse de raíz.
+   - Cierra con una pregunta inductiva:
+     👉 Ejemplo: "¿Llevas mucho tiempo tomando medicamentos para eso, o prefieres sanar de raíz de forma natural con lo que tienes en tu propia casa?"
+
+3. PASO 3: DESEO Y DIFERENCIACIÓN (NO ES UN SIMPLE EBOOK) + PREGUNTA DEL PAÍS
+   - Presenta tu recetario "Las 100 Recetas de la Abuela Para Sanar":
+     * Aclara que NO es un PDF frío de internet ni un libro teórico lleno de palabras difíciles.
+     * Es tu cuaderno de rescate de más de 40 años de práctica médica y familiar.
+     * En LETRA GRANDE y clara para leerlo comodísima sin forzar la vista.
+     * Con ingredientes sencillos y económicos de la verdulería y la cocina (cúrcuma, romero, limón, etc.).
+     * Con medidas caseras exactas (cucharadas y tazas, nada de gramos complicados).
+   - Enlaza con la pregunta inductiva sobre el país para cotizarle:
+     👉 Ejemplo: "Para poder darte todos los detalles y el valor exacto en tu moneda local, ¿desde qué país o ciudad me estás escribiendo, mi corazón?"
+
+4. PASO 4: LA OFERTA IRRESISTIBLE (PRECIO EXACTO Y ENLACES OFICIALES)
+   - Cuando la persona te diga de qué país escribe (o si ya se sabe):
+     * Revela el precio exacto oficial en su moneda local: ${precioTexto} (es un pago único simbólico, menos de lo que cuesta una sola salida a la farmacia).
+     * Menciona sus facilidades de pago locales (${metodosTexto}).
+     * Entrégale los dos enlaces oficiales:
+       📖 Para ver las recetas y testimonios: ${infoUrl}
+       🔒 Para ir directo a la compra segura en Hotmart: ${pagoUrl}
+     * Cierra con una pregunta inductiva hacia la acción:
+       👉 Ejemplo: "¿Pudiste abrir el enlace o quieres que te ayude a ver cuál es el medio de pago más fácil para ti en tu país, hija?"
+
+5. PASO 5: MANEJO DE OBJECIONES Y GARANTÍA TOTAL
+   - Si tiene dudas de seguridad, de si le llega al celular o de si funciona:
+     * Dale absoluta tranquilidad: cuenta con 7 días de garantía incondicional respaldada por Hotmart (si no siente mejoría, pide la devolución y se le regresa el 100% de su dinero sin preguntas).
+     * Le llega de inmediato a su correo y celular para leerlo como cualquier foto o imprimirlo en papel si lo prefiere.
+     * Cierra con una pregunta inductiva:
+       👉 Ejemplo: "¿Quieres que te espere en línea mientras completas tu pedido para asegurarme de que te llegue todo bien a tu correo?"
+
+TONO Y ESTILO OBLIGATORIOS:
+- Trato maternal: "hija", "mi corazón", "hija mía".
+- ⛔ NUNCA uses: "mis reinas", "reinitas", "mis amores", "amiga", ni fórmulas corporativas.
+- Longitud: 2 a 4 oraciones bien hiladas (máximo 50-60 palabras por mensaje). En WhatsApp se conversa de forma ágil y relajada.
+- Emojis: casi CERO (máximo uno discreto por mensaje o ninguno).
+- Negritas: utiliza solo un asterisco para resaltar palabras clave (*texto*).`;
 }
 
 /**
@@ -194,38 +260,7 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
   const baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.river.ai/v1';
   const modelo = process.env.DEEPSEEK_MODEL || 'deepseek-ai/DeepSeek-V4.1-Flash-1017';
 
-  const infoPais = infoPaisParam || obtenerInfoPais(senderId);
-  const infoUrl = INFO_URL;
-  const pagoUrl = CHECKOUT_URL;
-
-  // BLINDAJE DETERMINISTA: Intercepción inmediata de afirmaciones para evitar alucinaciones
-  const textoLimpio = (mensajeUsuario || '').trim().toLowerCase();
-  const esAfirmativo = /^(s[ií]+|dale|bueno|claro|por\s*favor|porfa|ok|oka|p[aá]salo|p[aá]samelo|m[aá]ndalo|m[aá]ndamelo|a\s*ver|me\s*interesa|quiero|link|enlace|p[aá]gina|web|s[ií]\s*abuela|s[ií]\s*porfa|s[ií]\s*gracias|s[ií]\s*quiero|manda|pasa)$/i.test(textoLimpio);
-
-  if (esAfirmativo) {
-    const respuestaDirecta = `Aquí tienes el enlace de mi libro, hija:\n${infoUrl}\n\nEl precio oficial en ${infoPais.pais} es ${infoPais.textoPrecio}.\nSi prefieres adquirirlo de inmediato en el checkout seguro de Hotmart, puedes entrar por aquí:\n${pagoUrl}\n\nTe llega directo a tu correo electrónico apenas lo adquieres. Cualquier duda me avisas y te ayudo con gusto.`;
-    registrarInteraccion(senderId, 'user', mensajeUsuario);
-    registrarInteraccion(senderId, 'assistant', respuestaDirecta);
-    return respuestaDirecta;
-  }
-
-  // BLINDAJE DETERMINISTA: Pedido directo de link de pago
-  const pidePago = /(link\s*de\s*pago|enlace\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|d[oó]nde\s*(?:lo\s*)?compro|c[oó]mo\s*(?:lo\s*)?compro|quiero\s*comprarlo|quiero\s*pagar|por\s*d[oó]nde\s*se\s*paga|m[eé]todos?\s*de\s*pago)/i.test(textoLimpio);
-  if (pidePago) {
-    const respuestaPago = `Aquí tienes el enlace directo para adquirirlo en Hotmart, hija:\n${pagoUrl}\n\nEl precio oficial en ${infoPais.pais} es ${infoPais.textoPrecio}. Te llega al momento a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
-    registrarInteraccion(senderId, 'user', mensajeUsuario);
-    registrarInteraccion(senderId, 'assistant', respuestaPago);
-    return respuestaPago;
-  }
-
-  // BLINDAJE DETERMINISTA: Consulta directa de precio o valor
-  const pidePrecio = /(cu[aá]l\s*es\s*el\s*(?:valor|precio|costo)|cu[aá]nto\s*(?:cuesta|vale|sale|es)|qu[eé]\s*(?:precio|valor|costo)|a\s*c[oó]mo\s*(?:sale|est[aá]|lo\s*tienes)|precio\s*(?:en\s*mi\s*pa[ií]s|en\s*pesos|en\s*d[oó]lares))/i.test(textoLimpio);
-  if (pidePrecio) {
-    const respuestaPrecio = `El recetario cuesta exactamente ${infoPais.textoPrecio} en ${infoPais.pais}.\n\nPuedes adquirirlo de forma segura en el checkout oficial de Hotmart por aquí:\n${pagoUrl}\n\nO si quieres ver todo el contenido y recetas que incluye antes de comprarlo, visita mi página:\n${infoUrl}\n\nCualquier duda que tengas me avisas con confianza y te ayudo.`;
-    registrarInteraccion(senderId, 'user', mensajeUsuario);
-    registrarInteraccion(senderId, 'assistant', respuestaPrecio);
-    return respuestaPrecio;
-  }
+  const infoPais = infoPaisParam || obtenerInfoPais(senderId, mensajeUsuario);
 
   const conversaciones = cargarConversaciones();
   if (!conversaciones[senderId]) {
@@ -242,7 +277,7 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
     });
   }
 
-  // Todo el historial completo desde el inicio para que la IA tenga contexto absoluto
+  // Conserva todo el contexto completo de la conversación
   if (conversaciones[senderId].length > 100) {
     conversaciones[senderId] = conversaciones[senderId].slice(-100);
   }
@@ -253,26 +288,72 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
   ];
 
   console.log(`[DeepSeek Cloud] Procesando respuesta para ${senderId} (${infoPais.pais} - ${infoPais.precioExacto})...`);
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: modelo,
-      messages: messagesParaApi,
-      temperature: 0.7,
-      max_tokens: 300
-    })
-  });
+  
+  let data;
+  let attempts = 0;
+  while (attempts < 3) {
+    try {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: modelo,
+          messages: messagesParaApi,
+          temperature: 0.7,
+          max_tokens: 350
+        })
+      });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Error en River AI API (${res.status}): ${errText}`);
+      if (res.ok) {
+        data = await res.json();
+        break;
+      }
+
+      if (res.status === 429 && attempts < 2) {
+        attempts++;
+        console.warn(`[River AI Rate Limit] Reintentando en ${attempts * 2}s (intento ${attempts}/2)...`);
+        await new Promise(r => setTimeout(r, attempts * 2000));
+        continue;
+      }
+
+      const errText = await res.text();
+      throw new Error(`Error en River AI API (${res.status}): ${errText}`);
+    } catch (e) {
+      if (attempts >= 2 || !e.message.includes('429')) {
+        const groqKey = process.env.GROQ_API_KEY;
+        if (groqKey) {
+          console.log('[Fallback Groq] Consultando LLaMA en Groq Cloud...');
+          try {
+            const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${groqKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: messagesParaApi,
+                temperature: 0.7,
+                max_tokens: 350
+              })
+            });
+            if (groqRes.ok) {
+              data = await groqRes.json();
+              break;
+            }
+          } catch (gErr) {
+            console.error('⚠️ [Error Fallback Groq]:', gErr.message);
+          }
+        }
+        throw e;
+      }
+      attempts++;
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
-
-  const data = await res.json();
   let textoRespuesta = data.choices[0].message.content.trim();
 
   // Filtros de naturalidad y seguridad
@@ -286,7 +367,7 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
     .trim();
 
   // Limpieza de emojis excesivos: no usar emojis todo el tiempo
-  textoRespuesta = textoRespuesta.replace(/[🌿👵✨💛]/gu, '').trim();
+  textoRespuesta = textoRespuesta.replace(/[🌿👵✨💛🌸❤️🤍]/gu, '').trim();
 
   if (textoRespuesta.length > 0) {
     textoRespuesta = textoRespuesta.charAt(0).toUpperCase() + textoRespuesta.slice(1);

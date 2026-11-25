@@ -25,31 +25,6 @@ app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 10000;
 
-const estadosPath = path.join(__dirname, 'estados_clientes.json');
-
-const estadosCache = {};
-
-function cargarEstados() {
-    try {
-        if (Object.keys(estadosCache).length > 0) {
-            return estadosCache;
-        }
-        if (fs.existsSync(estadosPath)) {
-            const data = JSON.parse(fs.readFileSync(estadosPath, 'utf-8'));
-            Object.assign(estadosCache, data);
-            return estadosCache;
-        }
-    } catch (e) {}
-    return estadosCache;
-}
-
-function guardarEstados(data) {
-    try {
-        Object.assign(estadosCache, data);
-        fs.writeFileSync(estadosPath, JSON.stringify(data, null, 2), 'utf-8');
-    } catch (e) {}
-}
-
 // Buffer de logs para diagnóstico remoto
 const recentLogs = [];
 function log(msg) {
@@ -563,199 +538,27 @@ async function startWhatsApp() {
             // Memoria completa y continua: registrar cada mensaje del usuario desde el inicio
             registrarInteraccion(remoteJid, 'user', body);
 
-            // Detección automática de país, moneda y medios de pago por prefijo telefónico
-            const infoPais = obtenerInfoPais(remoteJid);
+            // Detección automática de país, moneda y medios de pago por prefijo telefónico o texto
+            const infoPais = obtenerInfoPais(remoteJid, body);
 
-            const estados = cargarEstados();
-            const estadoActual = estados[remoteJid]?.paso;
-
-            // 1. Pausa humana natural de 3 a 5 segundos antes de responder
-            const delayLectura = 3500 + Math.floor(Math.random() * 2000);
+            // 1. Pausa humana natural simulando lectura (2.5 a 4.5 segundos)
+            const delayLectura = 2500 + Math.floor(Math.random() * 2000);
             log(`⏳ [Pausa Humana] Simulando lectura (${(delayLectura / 1000).toFixed(1)}s)...`);
             await new Promise(r => setTimeout(r, delayLectura));
 
-            // =========================================================================
-            // ESTRATEGIA DE EMBUDO CONVERSACIONAL DE TEXTO (1 O 2 OPCIONES - MÁX 5-7 PASOS)
-            // =========================================================================
+            // Indicador de "escribiendo..." en WhatsApp
+            await sock.sendPresenceUpdate('composing', remoteJid);
+            await new Promise(r => setTimeout(r, 2000));
 
-            // A. Intercepción global: Pedido directo de link de pago o compra
-            const pidePago = /(link\s*de\s*pago|enlace\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|d[oó]nde\s*(?:lo\s*)?compro|c[oó]mo\s*(?:lo\s*)?compro|quiero\s*comprarlo|quiero\s*pagar|por\s*d[oó]nde\s*se\s*paga|m[eé]todos?\s*de\s*pago)/i.test(body);
-            if (pidePago) {
-                const mensajePago = `Aquí tienes el enlace directo para adquirir mi recetario en Hotmart, mi corazón:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nEl precio oficial en ${infoPais.pais} es ${infoPais.textoPrecio}. Te llega de inmediato a tu correo electrónico tras la compra.\n\n¿Quieres que te espere en línea mientras completas tu pedido para asegurarme de que te llegue bien?`;
-                await sock.sendPresenceUpdate('composing', remoteJid);
-                await new Promise(r => setTimeout(r, 1500));
-                await sock.sendMessage(remoteJid, { text: mensajePago });
-                registrarInteraccion(remoteJid, 'user', body);
-                registrarInteraccion(remoteJid, 'assistant', mensajePago);
-                estados[remoteJid] = { paso: 'esperando_confirmacion_compra', timestamp: new Date().toISOString() };
-                guardarEstados(estados);
-                log(`[ENVIADO] Enlace directo de pago Hotmart entregado a ${remoteJid}`);
-                return;
-            }
-
-            // B. Intercepción global: Pedido explícito de enlaces del libro
-            const pideLink = /(p[aá]same\s*(?:el\s*)?(?:link|enlace|p[aá]gina)|quiero\s*(?:el\s*)?(?:link|enlace|libro)|d[oó]nde\s*est[aá]\s*(?:el\s*)?(?:link|enlace|libro)|ver\s*el\s*libro|dame\s*el\s*(?:link|enlace)|m[aá]ndame\s*(?:el\s*)?(?:link|enlace))/i.test(body);
-            if (pideLink) {
-                const mensajeLink = `Aquí tienes los dos accesos directos de mi libro, mi corazón:\n\n📖 Para ver todo lo que incluye el recetario:\nhttps://abuelatulun.site\n\n🔒 Para comprarlo con el descuento de hoy en Hotmart (${infoPais.precioExacto} en ${infoPais.pais}):\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\n¿Quieres que te ayude a elegir tu medio de pago local o ya pudiste entrar?`;
-                await sock.sendPresenceUpdate('composing', remoteJid);
-                await new Promise(r => setTimeout(r, 1500));
-                await sock.sendMessage(remoteJid, { text: mensajeLink });
-                registrarInteraccion(remoteJid, 'user', body);
-                registrarInteraccion(remoteJid, 'assistant', mensajeLink);
-                estados[remoteJid] = { paso: 'esperando_confirmacion_compra', timestamp: new Date().toISOString() };
-                guardarEstados(estados);
-                log(`[ENVIADO] Enlaces entregados a ${remoteJid} por pedido explícito`);
-                return;
-            }
-
-            // C. Intercepción global: Consulta directa de precio o valor
-            const pidePrecioDirecto = /(cu[aá]l\s*es\s*el\s*(?:valor|precio|costo)|cu[aá]nto\s*(?:cuesta|vale|sale|es)|qu[eé]\s*(?:precio|valor|costo)|a\s*c[oó]mo\s*(?:sale|est[aá]|lo\s*tienes)|precio\s*(?:en\s*mi\s*pa[ií]s|en\s*pesos|en\s*d[oó]lares))/i.test(body);
-            if (pidePrecioDirecto && estadoActual) {
-                const mensajePrecio = `Mira, mi corazón. El recetario completo cuesta exactamente ${infoPais.textoPrecio} en ${infoPais.pais} (para que te hagas una idea, es menos de lo que cuesta una sola salida a la farmacia).\n\nY lo puedes pagar fácil en ${infoPais.metodos}.\n\nAquí tienes los dos accesos directos:\n📖 Para ver todo lo que incluye el libro antes de pedirlo:\nhttps://abuelatulun.site\n\n🔒 O para ir directo a la compra segura en Hotmart:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nApenas haces el pago te llega de inmediato a tu correo y a tu pantalla. ¿Pudiste abrir el enlace o necesitas que te ayude con el pago, hija?`;
-                await sock.sendPresenceUpdate('composing', remoteJid);
-                await new Promise(r => setTimeout(r, 1500));
-                await sock.sendMessage(remoteJid, { text: mensajePrecio });
-                registrarInteraccion(remoteJid, 'user', body);
-                registrarInteraccion(remoteJid, 'assistant', mensajePrecio);
-                estados[remoteJid] = { paso: 'esperando_confirmacion_compra', timestamp: new Date().toISOString() };
-                guardarEstados(estados);
-                log(`[ENVIADO] Precio exacto entregado a ${remoteJid} (${infoPais.pais} - ${infoPais.precioExacto})`);
-                return;
-            }
-
-            // =========================================================================
-            // MÁQUINA DE ESTADOS DEL EMBUDO (TEXTO 100% NATIVO - OPCIONES 1 Y 2)
-            // =========================================================================
-
-            // PASO 1: Mensaje inicial (Llega de Instagram o sin estado previo)
-            if (!estadoActual) {
-                log(`[EMBUDO PASO 1] Primer contacto de ${remoteJid} (${infoPais.pais}). Enviando diagnóstico con 2 opciones...`);
-                const mensajePaso1 = `Hola, mi corazón. Qué alegría que me escribas, soy la Abuela Griselda.\n\nMi libro de recetas está hoy en oferta especial por solo $7 USD (o en tu moneda local), pero antes de darte el enlace quiero asegurarme de que te sirva de verdad. Cuéntame, ¿cuál es la molestia principal que más te pesa hoy?\n\n1️⃣ Dolor en articulaciones, rodillas o cuerpo rígido\n2️⃣ Panza inflamada, digestión pesada o mal dormir\n\n(Respóndeme solo con el número 1 o el 2, hija)`;
-
-                await sock.sendPresenceUpdate('composing', remoteJid);
-                await new Promise(r => setTimeout(r, 2000));
-                await sock.sendMessage(remoteJid, { text: mensajePaso1 });
-                registrarInteraccion(remoteJid, 'user', body);
-                registrarInteraccion(remoteJid, 'assistant', mensajePaso1);
-                estados[remoteJid] = { paso: 'esperando_opcion_dolor', timestamp: new Date().toISOString() };
-                guardarEstados(estados);
-                return;
-            }
-
-            // PASO 2: Responde al diagnóstico con 1 o 2 (o texto de dolor)
-            if (estadoActual === 'esperando_opcion_dolor') {
-                const esOpcion1 = /^(1|uno)\b|dolor|rodilla|articulaci|hueso|espalda|cuerpo r[ií]gido|artritis|cadera/i.test(body.trim());
-                const esOpcion2 = /^(2|dos)\b|panza|vientre|inflam|digest|gases|colon|reflujo|dormir|sue[nñ]o|insomnio|vejiga|cansancio/i.test(body.trim());
-
-                if (esOpcion1) {
-                    log(`[EMBUDO PASO 2] ${remoteJid} eligió Opción 1 (Articulaciones/Rodillas).`);
-                    const mensajePaso2A = `Te entiendo tanto, hija... Sé lo doloroso que es levantarse rígida o sentir que las rodillas queman al caminar. Lo triste es que las pastillas de farmacia solo adormecen el dolor unas horas y te van destruyendo el estómago.\n\nEn mi recetario te enseño compresas tibias y caldos desinflamatorios con ingredientes de tu cocina que sacan la inflamación de raíz sin químicos.\n\n¿Te gustaría ver las recetas caseras exactas que tengo preparadas para ti?\n\n👉 Respóndeme: 1) Sí, muéstramelo  o  2) ¿Cuánto cuesta?`;
-
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajePaso2A });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajePaso2A);
-                    estados[remoteJid] = { paso: 'esperando_interes_libro', dolor: 'articulaciones', timestamp: new Date().toISOString() };
-                    guardarEstados(estados);
-                    return;
-                } else if (esOpcion2) {
-                    log(`[EMBUDO PASO 2] ${remoteJid} eligió Opción 2 (Panza/Digestión/Sueño).`);
-                    const mensajePaso2B = `Ay hija, qué pesado es vivir con el vientre hinchado como un tambor y sintiendo que hasta el agua te inflama, o pasar la noche dando vueltas sin descansar. Eso no es "la edad", es tu sistema digestivo pidiendo desinflamarse de verdad.\n\nEn mi recetario te enseño infusiones digestivas y el elixir nocturno para desinflamar el abdomen y dormir de corrido, todo con lo que tienes en tu alacena.\n\n¿Te gustaría ver cómo preparar estas recetas caseras en 10 minutos?\n\n👉 Respóndeme: 1) Sí, muéstramelo  o  2) ¿Cuánto cuesta?`;
-
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajePaso2B });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajePaso2B);
-                    estados[remoteJid] = { paso: 'esperando_interes_libro', dolor: 'digestivo', timestamp: new Date().toISOString() };
-                    guardarEstados(estados);
-                    return;
-                }
-            }
-
-            // PASO 3: Responde si quiere ver el libro o pregunta precio
-            if (estadoActual === 'esperando_interes_libro') {
-                const esVerLibro = /^(1|uno|s[ií]+|dale|bueno|claro|mu[eé]stramelo|me interesa|por favor|porfa|a ver|c[oó]mo funciona)/i.test(body.trim());
-                const esPrecio = /^(2|dos)\b|cu[aá]nto|precio|valor|costo|a c[oó]mo/i.test(body.trim());
-
-                if (esVerLibro) {
-                    log(`[EMBUDO PASO 3] ${remoteJid} quiere conocer el recetario. Enviando diferenciación...`);
-                    const mensajePaso3 = `Mira, mi corazón, esto no es un simple libro digital ni un PDF cualquiera de internet. Es mi recetario familiar de más de 40 años rescatado paso a paso:\n\n✅ Viene en letra grande y clara para que lo leas comodísima sin cansar la vista.\n✅ Todo con medidas caseras exactas (cucharadas y tazas, nada de gramos raros).\n✅ Recetas listas en 10 a 15 minutos con lo que ya compras en tu verdulería.\n\nY además te llega al instante a tu celular y a tu correo para que lo tengas para siempre.\n\n¿Te paso el enlace seguro con el valor exacto en tu moneda local para que aproveches la oferta de hoy?\n\n👉 Respóndeme: 1) Sí, por favor  o  2) ¿Cómo se paga?`;
-
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajePaso3 });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajePaso3);
-                    estados[remoteJid] = { paso: 'esperando_cierre_oferta', timestamp: new Date().toISOString() };
-                    guardarEstados(estados);
-                    return;
-                } else if (esPrecio) {
-                    log(`[EMBUDO PASO 3] ${remoteJid} preguntó precio. Enviando oferta oficial...`);
-                    const mensajeOferta = `Mira, mi corazón. El recetario completo cuesta exactamente ${infoPais.textoPrecio} en ${infoPais.pais} (para que te hagas una idea, es menos de lo que cuesta una sola salida a la farmacia).\n\nY lo mejor es que puedes pagarlo fácil en ${infoPais.metodos}.\n\nAquí tienes los dos accesos directos:\n📖 Para ver todo lo que incluye el libro antes de pedirlo:\nhttps://abuelatulun.site\n\n🔒 O para ir directo a la compra segura en Hotmart:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nApenas haces el pago te llega de inmediato a tu correo y a tu pantalla. ¿Pudiste abrir el enlace o necesitas que te ayude a completar el pago, hija?`;
-
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajeOferta });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajeOferta);
-                    estados[remoteJid] = { paso: 'esperando_confirmacion_compra', timestamp: new Date().toISOString() };
-                    guardarEstados(estados);
-                    return;
-                }
-            }
-
-            // PASO 4: Cierre de oferta tras ver la diferenciación
-            if (estadoActual === 'esperando_cierre_oferta') {
-                log(`[EMBUDO PASO 4] ${remoteJid} aceptó la oferta. Enviando enlaces oficiales...`);
-                const mensajeOferta = `Aquí tienes el acceso seguro, mi corazón:\n\n📖 Para ver todo el recetario en mi página:\nhttps://abuelatulun.site\n\n🔒 Y para comprarlo con el descuento de hoy en Hotmart:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nEn ${infoPais.pais} cuesta exactamente ${infoPais.textoPrecio}. Y lo puedes pagar fácil con ${infoPais.metodos}.\n\nApenas confirmas el pago te llega de inmediato a tu correo y celular. ¿Pudiste abrir el enlace o prefieres que te guíe para hacer el pago, hija?`;
-
-                await sock.sendPresenceUpdate('composing', remoteJid);
-                await new Promise(r => setTimeout(r, 2000));
-                await sock.sendMessage(remoteJid, { text: mensajeOferta });
-                registrarInteraccion(remoteJid, 'user', body);
-                registrarInteraccion(remoteJid, 'assistant', mensajeOferta);
-                estados[remoteJid] = { paso: 'esperando_confirmacion_compra', timestamp: new Date().toISOString() };
-                guardarEstados(estados);
-                return;
-            }
-
-            // PASO 5: Si tienen dudas sobre seguridad, formato o pago
-            if (estadoActual === 'esperando_confirmacion_compra') {
-                const tieneDudas = /(c[oó]mo\s*pago|es\s*seguro|garant[ií]a|no\s*s[eé]|c[oó]mo\s*llega|duda|ayuda|no\s*puedo|d[oó]nde)/i.test(body);
-                if (tieneDudas) {
-                    log(`[EMBUDO PASO 5] Resolviendo objeción de ${remoteJid}...`);
-                    const mensajeGarantia = `Quédate completamente tranquila, mi corazón:\n\n1️⃣ Tu compra está 100% protegida por Hotmart con 7 días de garantía total: si no sientes alivio, pides la devolución y te regresan cada centavo sin hacer preguntas.\n2️⃣ Es muy fácil de usar: lo abres como cualquier foto en tu celular, o si prefieres, tus hijos o nietos te lo pueden imprimir en papel.\n\nAquí tienes el enlace directo para adquirirlo antes de que cierre la oferta de hoy:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\n¿Quieres que te espere mientras lo adquieres para darte la bienvenida?\n👉 Respóndeme: 1) Ya voy a pagar  o  2) Ayúdame con el pago`;
-
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajeGarantia });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajeGarantia);
-                    return;
-                }
-            }
-
-            // =========================================================================
-            // PASO FINAL: CONVERSACIÓN CONSULTIVA NATURAL CON IA (SIEMPRE EN TEXTO)
-            // =========================================================================
+            // Conversación estratégica con la IA (DeepSeek): razonamiento, interpretación natural y embudo de copy
             log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid} (${infoPais.pais}): "${body}"...`);
             try {
-                await sock.sendPresenceUpdate('composing', remoteJid);
-                await new Promise(r => setTimeout(r, 2000));
-
                 const respuestaIA = await responderComoAbuela(remoteJid, body, infoPais);
                 await sock.sendMessage(remoteJid, { text: respuestaIA });
-                log(`[ENVIADO] Respuesta en texto enviada a ${remoteJid}`);
-
-                if (!estados[remoteJid]) {
-                    estados[remoteJid] = { paso: 'ia_activa', timestamp: new Date().toISOString() };
-                    guardarEstados(estados);
-                }
+                log(`[ENVIADO] Respuesta enviada a ${remoteJid}`);
             } catch (err) {
                 log(`[ERROR DEEPSEEK] ${err.message}`);
-                const fallbackTexto = `Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu propia cocina. El libro cuesta ${infoPais.textoPrecio}. Si quieres ver el libro completo o el enlace de compra me avisas y te lo paso con gusto.`;
+                const fallbackTexto = `Hola mi corazón, se me cortó un momentito la señal. Cuéntame con confianza qué dolor o molestia es la que más te está pesando hoy para orientarte bien.`;
                 await sock.sendMessage(remoteJid, { text: fallbackTexto });
                 registrarInteraccion(remoteJid, 'assistant', fallbackTexto);
             }
