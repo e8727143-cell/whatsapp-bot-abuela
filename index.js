@@ -655,7 +655,7 @@ async function startWhatsApp() {
             // A. Si piden enlace de pago directo o cómo comprar:
             const pidePago = /(link\s*de\s*pago|enlace\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|d[oó]nde\s*(?:lo\s*)?compro|c[oó]mo\s*(?:lo\s*)?compro|quiero\s*comprarlo|quiero\s*pagar|por\s*d[oó]nde\s*se\s*paga|m[eé]todos?\s*de\s*pago)/i.test(body);
             if (pidePago) {
-                const mensajePago = `Aquí tienes el enlace directo para adquirirlo en Hotmart, hija:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nEl precio exacto en ${infoPais.pais} es ${infoPais.textoPrecio}. Al ingresar verás el valor en tu moneda y te llega al instante a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
+                const mensajePago = `Aquí tienes el enlace directo para adquirirlo en Hotmart, hija:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nEl precio exacto en ${infoPais.pais} es ${infoPais.textoPrecio}. Te llega de inmediato a tu correo electrónico tras la compra. Cualquier duda me avisas y te ayudo con gusto.`;
                 await sock.sendPresenceUpdate('composing', remoteJid);
                 await new Promise(r => setTimeout(r, 2000));
                 await sock.sendMessage(remoteJid, { text: mensajePago });
@@ -670,7 +670,7 @@ async function startWhatsApp() {
             // B. Si piden el enlace del libro explícitamente:
             const pideLink = /(p[aá]same\s*(?:el\s*)?(?:link|enlace|p[aá]gina)|quiero\s*(?:el\s*)?(?:link|enlace|libro)|d[oó]nde\s*est[aá]\s*(?:el\s*)?(?:link|enlace|libro)|ver\s*el\s*libro|dame\s*el\s*(?:link|enlace)|m[aá]ndame\s*(?:el\s*)?(?:link|enlace))/i.test(body);
             if (pideLink) {
-                const mensajeLink = 'Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda me avisas y te ayudo con gusto.';
+                const mensajeLink = `Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nEl precio oficial en ${infoPais.pais} es ${infoPais.textoPrecio}.\nSi prefieres adquirirlo directamente en el checkout seguro de Hotmart, es por aquí:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nTe llega de inmediato a tu correo. Cualquier duda me avisas y te ayudo con gusto.`;
                 await sock.sendPresenceUpdate('composing', remoteJid);
                 await new Promise(r => setTimeout(r, 2000));
                 await sock.sendMessage(remoteJid, { text: mensajeLink });
@@ -682,20 +682,35 @@ async function startWhatsApp() {
                 return;
             }
 
-            // C. Si responden con una afirmación ("Si", "Dale", "Bueno", "Claro", "Por favor", etc.)
+            // C. Si preguntan directamente por el precio o valor:
+            const pidePrecio = /(cu[aá]l\s*es\s*el\s*(?:valor|precio|costo)|cu[aá]nto\s*(?:cuesta|vale|sale|es)|qu[eé]\s*(?:precio|valor|costo)|a\s*c[oó]mo\s*(?:sale|est[aá]|lo\s*tienes)|precio\s*(?:en\s*mi\s*pa[ií]s|en\s*pesos|en\s*d[oó]lares))/i.test(body);
+            if (pidePrecio && (estadoActual || !/(hola|buenos\s*d[ií]as|buenas\s*tardes)/i.test(body))) {
+                const mensajePrecio = `El recetario cuesta exactamente ${infoPais.textoPrecio} en ${infoPais.pais}.\n\nPuedes adquirirlo de forma segura en el checkout oficial de Hotmart por aquí:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nO si quieres ver todo el contenido y recetas que incluye antes de comprarlo, visita mi página:\nhttps://abuelatulun.site\n\nCualquier duda que tengas me avisas con confianza y te ayudo.`;
+                await sock.sendPresenceUpdate('composing', remoteJid);
+                await new Promise(r => setTimeout(r, 2000));
+                await sock.sendMessage(remoteJid, { text: mensajePrecio });
+                registrarInteraccion(remoteJid, 'user', body);
+                registrarInteraccion(remoteJid, 'assistant', mensajePrecio);
+                estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
+                guardarEstados(estados);
+                log(`[ENVIADO] Precio exacto entregado a ${remoteJid} (${infoPais.pais} - ${infoPais.precioExacto})`);
+                return;
+            }
+
+            // D. Si responden con una afirmación ("Si", "Dale", "Bueno", "Claro", "Por favor", etc.)
             // Tras Audio 2, o si no hay estado previo pero afirman:
             const esAfirmativo = /^(s[ií]+|dale|bueno|claro|por\s*favor|porfa|ok|oka|p[aá]salo|p[aá]samelo|m[aá]ndalo|m[aá]ndamelo|a\s*ver|me\s*interesa|quiero|link|enlace|p[aá]gina|web|s[ií]\s*abuela|s[ií]\s*porfa|s[ií]\s*gracias|s[ií]\s*quiero|manda|pasa)$/i.test(body.trim()) || (body.trim().length <= 15 && /^(s[ií]|dale|bueno|ok|claro|pasa|manda)/i.test(body.trim()));
 
-            if (esAfirmativo && (!estadoActual || estadoActual === 'esperando_confirmacion_link' || estadoActual === 'esperando_problema')) {
-                const mensajeLink = 'Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda que tengas me avisas y te ayudo con gusto.';
+            if (esAfirmativo && (!estadoActual || estadoActual === 'esperando_confirmacion_link' || estadoActual === 'esperando_problema' || estadoActual === 'ia_activa')) {
+                const mensajeAfirmativo = `Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nEl precio oficial en ${infoPais.pais} es ${infoPais.textoPrecio}.\nSi prefieres adquirirlo de inmediato en el checkout seguro de Hotmart, puedes entrar por aquí:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nTe llega directo a tu correo electrónico apenas lo adquieres. Cualquier duda me avisas y te ayudo con gusto.`;
                 await sock.sendPresenceUpdate('composing', remoteJid);
                 await new Promise(r => setTimeout(r, 2000));
-                await sock.sendMessage(remoteJid, { text: mensajeLink });
+                await sock.sendMessage(remoteJid, { text: mensajeAfirmativo });
                 registrarInteraccion(remoteJid, 'user', body);
-                registrarInteraccion(remoteJid, 'assistant', mensajeLink);
+                registrarInteraccion(remoteJid, 'assistant', mensajeAfirmativo);
                 estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
                 guardarEstados(estados);
-                log(`[ENVIADO] Enlace informativo entregado a ${remoteJid} tras confirmación afirmativa`);
+                log(`[ENVIADO] Enlace y precio oficial entregados a ${remoteJid} tras confirmación afirmativa`);
                 return;
             }
 

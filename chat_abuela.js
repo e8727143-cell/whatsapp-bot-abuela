@@ -131,7 +131,7 @@ function obtenerInfoPais(senderId) {
     simbolo: '$',
     precioExacto: '$7.00 USD',
     metodos: 'tarjeta de crédito/débito o PayPal',
-    textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart. Al abrir el enlace verás el importe en tu moneda con las opciones locales de tu país',
+    textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart',
     checkoutUrl: CHECKOUT_URL
   });
 }
@@ -148,7 +148,7 @@ DATOS EXACTOS OFICIALES DEL CHECKOUT DE HOTMART (OFERTA DIRECTA: ${pagoUrl}):
 - País detectado por número telefónico: ${infoPais.pais}
 - Precio EXACTO oficial de Hotmart: ${infoPais.precioExacto} (${infoPais.textoPrecio})
 - Métodos de pago disponibles: ${infoPais.metodos}
-- ⛔ REGLA ESTRICTA DE PRECIO EXACTO: Si la persona pregunta cuánto cuesta, el valor en su país o cómo pagar ("¿cuánto cuesta en mi país?", "¿cuánto es en pesos?", "¿cuál es el valor?"): dile con total claridad que cuesta ${infoPais.textoPrecio}. PROHIBIDO dar números aproximados, rangos o inventados. Aclárale con naturalidad que al abrir el enlace directo de compra (${pagoUrl}) Hotmart detecta su país y le muestra la cotización oficial exacta al día de hoy para pagar con total comodidad. Si te pide el link de pago dale: ${pagoUrl}
+- ⛔ REGLA ESTRICTA DE PRECIO EXACTO: Si la persona pregunta cuánto cuesta, el valor en su país o cómo pagar ("¿cuánto cuesta en mi país?", "¿cuánto es en pesos?", "¿cuál es el valor?"): dile con total claridad que cuesta ${infoPais.textoPrecio}. PROHIBIDO dar números aproximados, rangos o inventados. PROHIBIDO terminantemente decirle que mire el precio en el enlace; debes darle el valor exacto aquí mismo en el chat. Si te pide el link de pago dale: ${pagoUrl}
 ` : '';
 
   return `Eres Griselda, conocida como la "Abuela Tulun" (@abuelatulun).
@@ -215,19 +215,28 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
   const esAfirmativo = /^(s[ií]+|dale|bueno|claro|por\s*favor|porfa|ok|oka|p[aá]salo|p[aá]samelo|m[aá]ndalo|m[aá]ndamelo|a\s*ver|me\s*interesa|quiero|link|enlace|p[aá]gina|web|s[ií]\s*abuela|s[ií]\s*porfa|s[ií]\s*gracias|s[ií]\s*quiero|manda|pasa)$/i.test(textoLimpio);
 
   if (esAfirmativo) {
-    const respuestaDirecta = `Aquí tienes el enlace de mi libro, hija:\n${infoUrl}\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda me avisas y te ayudo con gusto.`;
+    const respuestaDirecta = `Aquí tienes el enlace de mi libro, hija:\n${infoUrl}\n\nEl precio oficial en ${infoPais.pais} es ${infoPais.textoPrecio}.\nSi prefieres adquirirlo de inmediato en el checkout seguro de Hotmart, puedes entrar por aquí:\n${pagoUrl}\n\nTe llega directo a tu correo electrónico apenas lo adquieres. Cualquier duda me avisas y te ayudo con gusto.`;
     registrarInteraccion(senderId, 'user', mensajeUsuario);
     registrarInteraccion(senderId, 'assistant', respuestaDirecta);
     return respuestaDirecta;
   }
 
   // BLINDAJE DETERMINISTA: Pedido directo de link de pago
-  const pidePago = /(link\s*de\s*pago|enlace\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|d[oó]nde\s*(?:lo\s*)?compro|c[oó]mo\s*(?:lo\s*)?compro|quiero\s*comprarlo|quiero\s*pagar|por\s*d[oó]nde\s*se\s*paga)/i.test(textoLimpio);
+  const pidePago = /(link\s*de\s*pago|enlace\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|d[oó]nde\s*(?:lo\s*)?compro|c[oó]mo\s*(?:lo\s*)?compro|quiero\s*comprarlo|quiero\s*pagar|por\s*d[oó]nde\s*se\s*paga|m[eé]todos?\s*de\s*pago)/i.test(textoLimpio);
   if (pidePago) {
-    const respuestaPago = `Aquí tienes el enlace directo para adquirirlo en Hotmart, hija:\n${pagoUrl}\n\nCuesta ${infoPais.textoPrecio}. Al ingresar verás el valor en tu moneda y te llega al momento a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
+    const respuestaPago = `Aquí tienes el enlace directo para adquirirlo en Hotmart, hija:\n${pagoUrl}\n\nEl precio oficial en ${infoPais.pais} es ${infoPais.textoPrecio}. Te llega al momento a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
     registrarInteraccion(senderId, 'user', mensajeUsuario);
     registrarInteraccion(senderId, 'assistant', respuestaPago);
     return respuestaPago;
+  }
+
+  // BLINDAJE DETERMINISTA: Consulta directa de precio o valor
+  const pidePrecio = /(cu[aá]l\s*es\s*el\s*(?:valor|precio|costo)|cu[aá]nto\s*(?:cuesta|vale|sale|es)|qu[eé]\s*(?:precio|valor|costo)|a\s*c[oó]mo\s*(?:sale|est[aá]|lo\s*tienes)|precio\s*(?:en\s*mi\s*pa[ií]s|en\s*pesos|en\s*d[oó]lares))/i.test(textoLimpio);
+  if (pidePrecio) {
+    const respuestaPrecio = `El recetario cuesta exactamente ${infoPais.textoPrecio} en ${infoPais.pais}.\n\nPuedes adquirirlo de forma segura en el checkout oficial de Hotmart por aquí:\n${pagoUrl}\n\nO si quieres ver todo el contenido y recetas que incluye antes de comprarlo, visita mi página:\n${infoUrl}\n\nCualquier duda que tengas me avisas con confianza y te ayudo.`;
+    registrarInteraccion(senderId, 'user', mensajeUsuario);
+    registrarInteraccion(senderId, 'assistant', respuestaPrecio);
+    return respuestaPrecio;
   }
 
   const conversaciones = cargarConversaciones();
