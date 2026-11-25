@@ -17,7 +17,7 @@ const QRCode = require('qrcode');
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
-const { responderComoAbuela, registrarInteraccion } = require('./chat_abuela');
+const { responderComoAbuela, registrarInteraccion, obtenerInfoPais } = require('./chat_abuela');
 
 const app = express();
 app.use(express.json());
@@ -30,17 +30,25 @@ const audio1Path = path.join(__dirname, 'audio_1_bienvenida.ogg');
 const audio2Path = path.join(__dirname, 'audio_2_solucion_ebook.ogg');
 const estadosPath = path.join(__dirname, 'estados_clientes.json');
 
+const estadosCache = {};
+
 function cargarEstados() {
     try {
+        if (Object.keys(estadosCache).length > 0) {
+            return estadosCache;
+        }
         if (fs.existsSync(estadosPath)) {
-            return JSON.parse(fs.readFileSync(estadosPath, 'utf-8'));
+            const data = JSON.parse(fs.readFileSync(estadosPath, 'utf-8'));
+            Object.assign(estadosCache, data);
+            return estadosCache;
         }
     } catch (e) {}
-    return {};
+    return estadosCache;
 }
 
 function guardarEstados(data) {
     try {
+        Object.assign(estadosCache, data);
         fs.writeFileSync(estadosPath, JSON.stringify(data, null, 2), 'utf-8');
     } catch (e) {}
 }
@@ -629,41 +637,80 @@ async function startWhatsApp() {
             // Memoria completa y continua: registrar cada mensaje del usuario desde el inicio
             registrarInteraccion(remoteJid, 'user', body);
 
+            // Detección automática de país, moneda y medios de pago por prefijo telefónico
+            const infoPais = obtenerInfoPais(remoteJid);
+
             const estados = cargarEstados();
             const estadoActual = estados[remoteJid]?.paso;
+
+            // 1. Pausa humana natural de 3 a 5 segundos antes de responder
+            const delayLectura = 3500 + Math.floor(Math.random() * 2000);
+            log(`⏳ [Pausa Humana] Simulando lectura (${(delayLectura / 1000).toFixed(1)}s)...`);
+            await new Promise(r => setTimeout(r, delayLectura));
+
+            // =========================================================================
+            // BLINDAJE DETERMINISTA DE ENLACES (PRIORIDAD ABSOLUTA - CERO ALUCINACIONES)
+            // =========================================================================
+
+            // A. Si piden enlace de pago directo o cómo comprar:
+            const pidePago = /(link\s*de\s*pago|enlace\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|d[oó]nde\s*(?:lo\s*)?compro|c[oó]mo\s*(?:lo\s*)?compro|quiero\s*comprarlo|quiero\s*pagar|por\s*d[oó]nde\s*se\s*paga|m[eé]todos?\s*de\s*pago)/i.test(body);
+            if (pidePago) {
+                const mensajePago = `Aquí tienes el enlace directo para adquirirlo, hija:\nhttps://hotm.io/pagodelibro\n\nCuesta ${infoPais.textoPrecio}. Al ingresar verás el valor en tu moneda y te llega al instante a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
+                await sock.sendPresenceUpdate('composing', remoteJid);
+                await new Promise(r => setTimeout(r, 2000));
+                await sock.sendMessage(remoteJid, { text: mensajePago });
+                registrarInteraccion(remoteJid, 'user', body);
+                registrarInteraccion(remoteJid, 'assistant', mensajePago);
+                estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
+                guardarEstados(estados);
+                log(`[ENVIADO] Enlace directo de pago entregado a ${remoteJid} (${infoPais.pais})`);
+                return;
+            }
+
+            // B. Si piden el enlace del libro explícitamente:
+            const pideLink = /(p[aá]same\s*(?:el\s*)?(?:link|enlace|p[aá]gina)|quiero\s*(?:el\s*)?(?:link|enlace|libro)|d[oó]nde\s*est[aá]\s*(?:el\s*)?(?:link|enlace|libro)|ver\s*el\s*libro|dame\s*el\s*(?:link|enlace)|m[aá]ndame\s*(?:el\s*)?(?:link|enlace))/i.test(body);
+            if (pideLink) {
+                const mensajeLink = 'Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda me avisas y te ayudo con gusto.';
+                await sock.sendPresenceUpdate('composing', remoteJid);
+                await new Promise(r => setTimeout(r, 2000));
+                await sock.sendMessage(remoteJid, { text: mensajeLink });
+                registrarInteraccion(remoteJid, 'user', body);
+                registrarInteraccion(remoteJid, 'assistant', mensajeLink);
+                estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
+                guardarEstados(estados);
+                log(`[ENVIADO] Enlace informativo entregado a ${remoteJid} por pedido explícito`);
+                return;
+            }
+
+            // C. Si responden con una afirmación ("Si", "Dale", "Bueno", "Claro", "Por favor", etc.)
+            // Tras Audio 2, o si no hay estado previo pero afirman:
+            const esAfirmativo = /^(s[ií]+|dale|bueno|claro|por\s*favor|porfa|ok|oka|p[aá]salo|p[aá]samelo|m[aá]ndalo|m[aá]ndamelo|a\s*ver|me\s*interesa|quiero|link|enlace|p[aá]gina|web|s[ií]\s*abuela|s[ií]\s*porfa|s[ií]\s*gracias|s[ií]\s*quiero|manda|pasa)$/i.test(body.trim()) || (body.trim().length <= 15 && /^(s[ií]|dale|bueno|ok|claro|pasa|manda)/i.test(body.trim()));
+
+            if (esAfirmativo && (!estadoActual || estadoActual === 'esperando_confirmacion_link' || estadoActual === 'esperando_problema')) {
+                const mensajeLink = 'Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda que tengas me avisas y te ayudo con gusto.';
+                await sock.sendPresenceUpdate('composing', remoteJid);
+                await new Promise(r => setTimeout(r, 2000));
+                await sock.sendMessage(remoteJid, { text: mensajeLink });
+                registrarInteraccion(remoteJid, 'user', body);
+                registrarInteraccion(remoteJid, 'assistant', mensajeLink);
+                estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
+                guardarEstados(estados);
+                log(`[ENVIADO] Enlace informativo entregado a ${remoteJid} tras confirmación afirmativa`);
+                return;
+            }
 
             const esDisparador = /(adquirir|libro|receta|recetas|valor|precio|costo|comprar|cu[aá]nto|hola abuela)/i.test(body);
 
             // En grupos solo respondemos si coincide con el disparador para no saturar
             if (esGrupo && !esDisparador) return;
 
-            // 1. Pausa humana natural de 4 a 6 segundos antes de responder
-            const delayLectura = 4000 + Math.floor(Math.random() * 2000);
-            log(`⏳ [Pausa Humana] Simulando lectura (${(delayLectura / 1000).toFixed(1)}s)...`);
-            await new Promise(r => setTimeout(r, delayLectura));
-
-            // Si es un mensaje general (ej: "hola", "buenas", dudas generales) y no tiene estado previo:
-            if (!estadoActual && !esDisparador) {
-                log(`[DEEPSEEK] Mensaje general recibido de ${remoteJid}: "${body}". Respondiendo con IA...`);
-                try {
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-
-                    const respuestaIA = await responderComoAbuela(remoteJid, body);
-                    await sock.sendMessage(remoteJid, { text: respuestaIA });
-                    log(`[ENVIADO] Respuesta DeepSeek a saludo entregada a ${remoteJid}`);
-                } catch (e) {
-                    log(`[ERROR SALUDO IA] ${e.message}`);
-                    const saludoFbk = 'Hola, qué lindo que me escribas. Cuéntame con confianza, ¿qué dolor o qué molestia tienes hoy? Dime y te leo con calma.';
-                    await sock.sendMessage(remoteJid, { text: saludoFbk });
-                    registrarInteraccion(remoteJid, 'assistant', saludoFbk);
-                }
-                return;
-            }
+            // =========================================================================
+            // EMBUDO DE 2 PASOS (AUDIOS NATIVOS NARRADOS)
+            // =========================================================================
 
             // PASO 1: Mensaje inicial / Disparador -> Envía Audio 1 (Bienvenida y pregunta de salud)
             if (!estadoActual && esDisparador) {
-                log(`[EMBUDO] Disparador recibido de ${remoteJid}. Enviando Audio 1...`);
+                log(`[EMBUDO] Disparador recibido de ${remoteJid} (${infoPais.pais}). Enviando Audio 1...`);
                 const textoPaso1 = 'Hola... ¿cómo estás? Qué lindo que me escribas por acá. Mira, antes de hablarte del libro... cuéntame, ¿qué dolor o qué molestia tienes hoy? Dime y te escucho con calma.';
                 let enviado = false;
 
@@ -745,88 +792,27 @@ async function startWhatsApp() {
                 return;
             }
 
-            // PASO 2.5: Responde tras Audio 2 a "¿Quieres que te pase el enlace?"
-            if (estadoActual === 'esperando_confirmacion_link') {
-                log(`[EMBUDO] Respuesta recibida tras Audio 2 de ${remoteJid}: "${body}"`);
+            // =========================================================================
+            // PASO 3: CONVERSACIÓN INTELIGENTE Y NATURAL CON IA (SIEMPRE RESPONDE EN TEXTO)
+            // =========================================================================
+            log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid} (${infoPais.pais}): "${body}"...`);
+            try {
+                await sock.sendPresenceUpdate('composing', remoteJid);
+                await new Promise(r => setTimeout(r, 2000));
 
-                // 1. Si pide pagar directamente
-                const pidePago = /(pago|pagar|comprar|compro|abono|abonar|d[oó]nde\s*pago|c[oó]mo\s*pago|link\s*de\s*pago|tarjeta|transferencia)/i.test(body);
-                if (pidePago) {
-                    const mensajePago = 'Aquí tienes el enlace directo para adquirirlo, hija:\nhttps://hotm.io/pagodelibro\n\nCuesta solo siete dólares y te llega al instante a tu correo. Cualquier duda me avisas y te ayudo con gusto.';
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajePago });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajePago);
-                    estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
+                const respuestaIA = await responderComoAbuela(remoteJid, body, infoPais);
+                await sock.sendMessage(remoteJid, { text: respuestaIA });
+                log(`[ENVIADO] Respuesta en texto enviada a ${remoteJid}`);
+
+                if (!estados[remoteJid]) {
+                    estados[remoteJid] = { paso: 'ia_activa', timestamp: new Date().toISOString() };
                     guardarEstados(estados);
-                    log(`[ENVIADO] Enlace directo de pago entregado a ${remoteJid}`);
-                    return;
                 }
-
-                // 2. Si dice Sí, Dale, Bueno, Claro, Pásamelo, Me interesa o cualquier confirmación afirmativa
-                const esAfirmativo = /^(s[ií]+|dale|bueno|claro|por\s*favor|porfa|ok|oka|p[aá]salo|p[aá]samelo|m[aá]ndalo|m[aá]ndamelo|a\s*ver|me\s*interesa|quiero|link|enlace|p[aá]gina|web|s[ií]\s*abuela|s[ií]\s*porfa|s[ií]\s*gracias|s[ií]\s*quiero|manda|pasa)/i.test(body.trim()) || (body.trim().length <= 15 && /(s[ií]|dale|bueno|ok|claro|pasa|manda)/i.test(body));
-
-                if (esAfirmativo) {
-                    const mensajeLink = 'Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda que tengas me avisas y te ayudo con gusto.';
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajeLink });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajeLink);
-                    estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
-                    guardarEstados(estados);
-                    log(`[ENVIADO] Enlace de información entregado a ${remoteJid}`);
-                    return;
-                }
-            }
-
-            // PASO 3: Conversación inteligente y natural con IA DeepSeek (SIEMPRE RESPONDE EN TEXTO)
-            if (estadoActual === 'ia_activa' || estadoActual === 'esperando_confirmacion_link' || esDisparador) {
-                // Interceptar solicitudes explícitas de enlace o pago también en fase activa
-                const pidePago = /(link\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|quiero\s*comprarlo|d[oó]nde\s*lo\s*compro|c[oó]mo\s*lo\s*compro)/i.test(body);
-                if (pidePago) {
-                    const mensajePago = 'Aquí tienes el enlace directo para adquirirlo, hija:\nhttps://hotm.io/pagodelibro\n\nCuesta solo siete dólares y te llega al instante a tu correo. Cualquier duda me avisas y te ayudo con gusto.';
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajePago });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajePago);
-                    log(`[ENVIADO] Enlace de pago solicitado en ia_activa entregado a ${remoteJid}`);
-                    return;
-                }
-
-                const pideLink = /(p[aá]same\s*(?:el\s*)?(?:link|enlace|p[aá]gina)|quiero\s*(?:el\s*)?(?:link|enlace|libro)|d[oó]nde\s*est[aá]\s*(?:el\s*)?(?:link|enlace|libro)|ver\s*el\s*libro|dame\s*el\s*(?:link|enlace))/i.test(body);
-                if (pideLink) {
-                    const mensajeLink = 'Aquí tienes el enlace de mi libro, hija:\nhttps://abuelatulun.site\n\nAhí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda me avisas y te ayudo con gusto.';
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-                    await sock.sendMessage(remoteJid, { text: mensajeLink });
-                    registrarInteraccion(remoteJid, 'user', body);
-                    registrarInteraccion(remoteJid, 'assistant', mensajeLink);
-                    log(`[ENVIADO] Enlace de libro solicitado en ia_activa entregado a ${remoteJid}`);
-                    return;
-                }
-
-                log(`[DEEPSEEK] Consultando IA para responder en texto a ${remoteJid}...`);
-                try {
-                    await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, 2000));
-
-                    const respuestaIA = await responderComoAbuela(remoteJid, body);
-                    await sock.sendMessage(remoteJid, { text: respuestaIA });
-                    log(`[ENVIADO] Respuesta en texto enviada a ${remoteJid}`);
-
-                    if (!estados[remoteJid]) {
-                        estados[remoteJid] = { paso: 'ia_activa', timestamp: new Date().toISOString() };
-                        guardarEstados(estados);
-                    }
-                } catch (err) {
-                    log(`[ERROR DEEPSEEK] ${err.message}`);
-                    const fallbackTexto = 'Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu propia cocina. Si quieres ver el libro completo o necesitas el link de pago, me avisas y te lo paso con gusto.';
-                    await sock.sendMessage(remoteJid, { text: fallbackTexto });
-                    registrarInteraccion(remoteJid, 'assistant', fallbackTexto);
-                }
+            } catch (err) {
+                log(`[ERROR DEEPSEEK] ${err.message}`);
+                const fallbackTexto = `Entiendo bien, hija. Con mis recetas caseras vas a sanar de raíz con lo que tienes en tu propia cocina. El libro cuesta ${infoPais.textoPrecio}. Si quieres ver el libro completo o el enlace de compra me avisas y te lo paso con gusto.`;
+                await sock.sendMessage(remoteJid, { text: fallbackTexto });
+                registrarInteraccion(remoteJid, 'assistant', fallbackTexto);
             }
         });
 
