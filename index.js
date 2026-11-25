@@ -18,6 +18,7 @@ const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
 const { responderComoAbuela, registrarInteraccion, obtenerInfoPais } = require('./chat_abuela');
+const { restaurarSesionDesdeNube, guardarSesionEnNube, borrarSesionEnNube } = require('./session_storage');
 
 const app = express();
 app.use(express.json());
@@ -425,6 +426,9 @@ async function startWhatsApp() {
             fs.mkdirSync(authFolder, { recursive: true });
         }
 
+        // 1. Restaurar sesión previa de la nube si existe (Upstash Redis / MongoDB Atlas)
+        await restaurarSesionDesdeNube(authFolder);
+
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
         const { version, isLatest } = await fetchLatestBaileysVersion();
         log(`[BAILEYS] Versión Web: [${version.join(', ')}], isLatest: ${isLatest}`);
@@ -447,7 +451,10 @@ async function startWhatsApp() {
             fireInitQueries: true
         });
 
-        sock.ev.on('creds.update', saveCreds);
+        sock.ev.on('creds.update', async () => {
+            await saveCreds();
+            guardarSesionEnNube(authFolder);
+        });
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
@@ -469,6 +476,7 @@ async function startWhatsApp() {
                 if (statusCode === DisconnectReason.loggedOut) {
                     log('[LOGOUT] Limpiando credenciales para permitir nuevo login');
                     try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
+                    await borrarSesionEnNube();
                 }
 
                 if (shouldReconnect) {
@@ -482,6 +490,7 @@ async function startWhatsApp() {
                 log('====================================================');
                 log('¡WHATSAPP CONECTADO EXITOSAMENTE Y RESPONDIENDO 24/7!');
                 log('====================================================');
+                guardarSesionEnNube(authFolder);
             }
         });
 
