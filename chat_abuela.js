@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 const CONVERSACIONES_PATH = path.join(__dirname, 'conversaciones.json');
+const CHECKOUT_URL = process.env.PAGO_URL || 'https://pay.hotmart.com/W105526885V?off=qmsrqdaf';
+const INFO_URL = process.env.INFO_URL || 'https://abuelatulun.site';
 
 // Memoria en memoria (cache de ejecución) y en disco
 const memoriaCache = {};
@@ -60,7 +62,8 @@ function registrarInteraccion(senderId, role, content) {
 }
 
 /**
- * Detecta el país, moneda local y medios de pago a partir del prefijo telefónico en senderId.
+ * Precios EXACTOS y oficiales del Checkout de Hotmart (oferta off=qmsrqdaf).
+ * Verificados directamente en https://pay.hotmart.com/W105526885V?off=qmsrqdaf
  */
 function obtenerInfoPais(senderId) {
   if (!senderId) {
@@ -69,167 +72,249 @@ function obtenerInfoPais(senderId) {
       codigo: 'INT',
       moneda: 'USD',
       simbolo: '$',
-      precioLocal: '$7 USD',
+      precioExacto: '$7.00 USD',
       metodos: 'tarjeta de crédito/débito o PayPal',
-      textoPrecio: 'solo siete dólares ($7 USD) y te llega al instante a tu correo electrónico'
+      textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
   const num = senderId.replace(/[^0-9]/g, '');
 
-  // Colombia (+57)
+  // Colombia (+57) -> Exacto Hotmart: $ 26.747 COP
   if (num.startsWith('57')) {
     return {
       pais: 'Colombia',
       codigo: 'CO',
       moneda: 'COP',
       simbolo: '$',
-      precioLocal: 'unos 28.000 a 30.000 pesos colombianos ($7 USD)',
+      precioExacto: '$26.747 COP',
       metodos: 'Nequi, PSE, Efecty en efectivo o tarjeta',
-      textoPrecio: 'siete dólares (aproximadamente entre 28.000 y 30.000 pesos colombianos) y puedes pagar en efectivo en Efecty, por PSE, Nequi o con tarjeta'
+      textoPrecio: 'exactamente $26.747 pesos colombianos ($26.747 COP) en el checkout de Hotmart, y puedes pagar en efectivo en Efecty, por Nequi, PSE o con tarjeta',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // México (+52 o +521)
+  // México (+52 o +521) -> Exacto Hotmart: $170.52 MXN (con IVA incluido)
   if (num.startsWith('52')) {
     return {
       pais: 'México',
       codigo: 'MX',
       moneda: 'MXN',
       simbolo: '$',
-      precioLocal: 'unos 140 a 145 pesos mexicanos ($7 USD)',
+      precioExacto: '$170.52 MXN',
       metodos: 'OXXO en efectivo, tarjeta o SPEI',
-      textoPrecio: 'siete dólares (aproximadamente entre 140 y 145 pesos mexicanos) y puedes pagar en efectivo en cualquier OXXO, por transferencia o con tarjeta'
+      textoPrecio: 'exactamente $170.52 pesos mexicanos ($170.52 MXN, con IVA incluido) en el checkout de Hotmart, y puedes pagar en cualquier OXXO en efectivo, por transferencia o con tarjeta',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // Perú (+51)
+  // Perú (+51) -> Exacto Hotmart: S/ 27.00 PEN
   if (num.startsWith('51')) {
     return {
       pais: 'Perú',
       codigo: 'PE',
       moneda: 'PEN',
       simbolo: 'S/',
-      precioLocal: 'unos 26 a 28 soles peruanos ($7 USD)',
+      precioExacto: 'S/ 27.00',
       metodos: 'Yape, PagoEfectivo en efectivo o tarjeta',
-      textoPrecio: 'siete dólares (alrededor de 26 a 28 soles peruanos) y puedes pagar con Yape, PagoEfectivo en efectivo o con tarjeta'
+      textoPrecio: 'exactamente 27 soles (S/ 27.00) en el checkout de Hotmart, y puedes pagar con Yape, PagoEfectivo en efectivo o con tarjeta',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // Chile (+56)
+  // Chile (+56) -> Exacto Hotmart: $7.630 CLP (con IVA incluido)
   if (num.startsWith('56')) {
     return {
       pais: 'Chile',
       codigo: 'CL',
       moneda: 'CLP',
       simbolo: '$',
-      precioLocal: 'unos 6.800 a 7.000 pesos chilenos ($7 USD)',
+      precioExacto: '$7.630 CLP',
       metodos: 'Webpay, Cuenta RUT, Sencillito o tarjeta',
-      textoPrecio: 'siete dólares (alrededor de 6.800 a 7.000 pesos chilenos) y puedes pagar con Cuenta RUT, Webpay, Sencillito o tarjeta'
+      textoPrecio: 'exactamente $7.630 pesos chilenos ($7.630 CLP, con IVA incluido) en el checkout de Hotmart, y puedes pagar con Cuenta RUT, Webpay, Sencillito o tarjeta',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // España (+34)
+  // España (+34) -> Exacto Hotmart: 7,00 € (con IVA incluido)
   if (num.startsWith('34')) {
     return {
       pais: 'España',
       codigo: 'ES',
       moneda: 'EUR',
       simbolo: '€',
-      precioLocal: 'aproximadamente 6,50 € ($7 USD)',
+      precioExacto: '7,00 €',
       metodos: 'Bizum o tarjeta',
-      textoPrecio: 'siete dólares (aproximadamente 6,50 euros) y puedes pagar cómodamente con Bizum o tarjeta'
+      textoPrecio: 'exactamente 7,00 euros (7,00 €) en el checkout de Hotmart, y puedes pagar con Bizum o tarjeta',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // Argentina (+54)
+  // Argentina (+54) -> Exacto Hotmart: $ 13.757,00 ARS
   if (num.startsWith('54')) {
     return {
       pais: 'Argentina',
       codigo: 'AR',
-      moneda: 'ARS / USD',
+      moneda: 'ARS',
       simbolo: '$',
-      precioLocal: '$7 USD',
+      precioExacto: '$13.757,00 ARS',
       metodos: 'tarjeta de débito o crédito',
-      textoPrecio: 'siete dólares ($7 USD), que en tu tarjeta se convierten a pesos argentinos según la cotización oficial'
+      textoPrecio: 'exactamente $13.757 pesos argentinos ($13.757,00 ARS) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // Ecuador (+593) - Dolarizado
+  // Estados Unidos / Puerto Rico / Canadá (+1) -> Exacto Hotmart: $7.00 USD
+  if (num.startsWith('1')) {
+    // Si es República Dominicana (+1809, +1829, +1849) -> Exacto Hotmart: RD$ 442.00
+    if (num.startsWith('1809') || num.startsWith('1829') || num.startsWith('1849')) {
+      return {
+        pais: 'República Dominicana',
+        codigo: 'DO',
+        moneda: 'DOP',
+        simbolo: 'RD$',
+        precioExacto: 'RD$ 442.00',
+        metodos: 'tarjeta o PayPal',
+        textoPrecio: 'exactamente 442 pesos dominicanos (RD$ 442.00) en el checkout de Hotmart',
+        checkoutUrl: CHECKOUT_URL
+      };
+    }
+    return {
+      pais: 'Estados Unidos',
+      codigo: 'US',
+      moneda: 'USD',
+      simbolo: '$',
+      precioExacto: '$7.00 USD',
+      metodos: 'tarjeta, PayPal o Apple Pay',
+      textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
+    };
+  }
+
+  // Ecuador (+593) -> Dolarizado: $7.00 USD
   if (num.startsWith('593')) {
     return {
       pais: 'Ecuador',
       codigo: 'EC',
       moneda: 'USD',
       simbolo: '$',
-      precioLocal: '$7 USD',
+      precioExacto: '$7.00 USD',
       metodos: 'tarjeta de débito o crédito',
-      textoPrecio: 'solo siete dólares ($7 USD) y te llega directo a tu correo'
+      textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // Estados Unidos / Puerto Rico / Canadá (+1)
-  if (num.startsWith('1')) {
-    return {
-      pais: 'Estados Unidos',
-      codigo: 'US',
-      moneda: 'USD',
-      simbolo: '$',
-      precioLocal: '$7 USD',
-      metodos: 'tarjeta, PayPal o Apple Pay',
-      textoPrecio: 'solo siete dólares ($7 USD) y te llega de inmediato a tu correo'
-    };
-  }
-
-  // Uruguay (+598)
+  // Uruguay (+598) -> Exacto Hotmart: $ 300,00 UYU
   if (num.startsWith('598')) {
     return {
       pais: 'Uruguay',
       codigo: 'UY',
-      moneda: 'USD',
+      moneda: 'UYU',
       simbolo: '$',
-      precioLocal: '$7 USD (unos 290 pesos uruguayos)',
+      precioExacto: '$300,00 UYU',
       metodos: 'tarjeta de débito o crédito',
-      textoPrecio: 'siete dólares ($7 USD, que son aproximadamente 290 pesos uruguayos)'
+      textoPrecio: 'exactamente $300 pesos uruguayos ($300,00 UYU) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // Bolivia (+591)
+  // Bolivia (+591) -> Exacto Hotmart: Bs 87,00 BOB
   if (num.startsWith('591')) {
     return {
       pais: 'Bolivia',
       codigo: 'BO',
-      moneda: 'BOB / USD',
+      moneda: 'BOB',
       simbolo: 'Bs',
-      precioLocal: 'unos 48 a 50 bolivianos ($7 USD)',
+      precioExacto: 'Bs 87,00',
       metodos: 'tarjeta o QR',
-      textoPrecio: 'siete dólares (aproximadamente 48 a 50 bolivianos)'
+      textoPrecio: 'exactamente 87 bolivianos (Bs 87,00) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // Costa Rica (+506)
+  // Costa Rica (+506) -> Exacto Hotmart: ₡3.284,00 CRC
   if (num.startsWith('506')) {
     return {
       pais: 'Costa Rica',
       codigo: 'CR',
-      moneda: 'CRC / USD',
+      moneda: 'CRC',
       simbolo: '₡',
-      precioLocal: 'unos 3.600 colones ($7 USD)',
+      precioExacto: '₡3.284,00',
       metodos: 'tarjeta',
-      textoPrecio: 'siete dólares (alrededor de 3.600 colones costarricenses)'
+      textoPrecio: 'exactamente 3.284 colones (₡3.284,00) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
-  // Guatemala (+502)
+  // Guatemala (+502) -> Exacto Hotmart: Q 57.00 GTQ
   if (num.startsWith('502')) {
     return {
       pais: 'Guatemala',
       codigo: 'GT',
-      moneda: 'GTQ / USD',
+      moneda: 'GTQ',
       simbolo: 'Q',
-      precioLocal: 'unos 54 a 56 quetzales ($7 USD)',
+      precioExacto: 'Q 57.00',
       metodos: 'tarjeta',
-      textoPrecio: 'siete dólares (unos 54 a 56 quetzales)'
+      textoPrecio: 'exactamente 57 quetzales (Q 57.00) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
+    };
+  }
+
+  // El Salvador (+503) -> Dolarizado: $7.00 USD
+  if (num.startsWith('503')) {
+    return {
+      pais: 'El Salvador',
+      codigo: 'SV',
+      moneda: 'USD',
+      simbolo: '$',
+      precioExacto: '$7.00 USD',
+      metodos: 'tarjeta',
+      textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
+    };
+  }
+
+  // Panamá (+507) -> Exacto Hotmart: B/. 9.00
+  if (num.startsWith('507')) {
+    return {
+      pais: 'Panamá',
+      codigo: 'PA',
+      moneda: 'PAB/USD',
+      simbolo: 'B/.',
+      precioExacto: 'B/. 9.00',
+      metodos: 'tarjeta',
+      textoPrecio: 'exactamente 9 balboas / dólares (B/. 9.00) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
+    };
+  }
+
+  // Paraguay (+595) -> Exacto Hotmart: Gs. 47.417 PYG
+  if (num.startsWith('595')) {
+    return {
+      pais: 'Paraguay',
+      codigo: 'PY',
+      moneda: 'PYG',
+      simbolo: 'Gs.',
+      precioExacto: 'Gs. 47.417',
+      metodos: 'tarjeta',
+      textoPrecio: 'exactamente 47.417 guaraníes (Gs. 47.417) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
+    };
+  }
+
+  // Honduras (+504) -> Exacto Hotmart: L 199.00 HNL
+  if (num.startsWith('504')) {
+    return {
+      pais: 'Honduras',
+      codigo: 'HN',
+      moneda: 'HNL',
+      simbolo: 'L',
+      precioExacto: 'L 199.00',
+      metodos: 'tarjeta',
+      textoPrecio: 'exactamente 199 lempiras (L 199.00) en el checkout de Hotmart',
+      checkoutUrl: CHECKOUT_URL
     };
   }
 
@@ -239,9 +324,10 @@ function obtenerInfoPais(senderId) {
     codigo: 'INT',
     moneda: 'USD',
     simbolo: '$',
-    precioLocal: '$7 USD',
+    precioExacto: '$7.00 USD',
     metodos: 'tarjeta de crédito/débito o PayPal',
-    textoPrecio: 'solo siete dólares ($7 USD). Al abrir el enlace verás el valor exacto en tu moneda local con las opciones de pago de tu país'
+    textoPrecio: 'exactamente siete dólares ($7.00 USD) en el checkout de Hotmart. Al abrir el enlace verás el importe en tu moneda con las opciones locales de tu país',
+    checkoutUrl: CHECKOUT_URL
   };
 }
 
@@ -249,20 +335,20 @@ function obtenerInfoPais(senderId) {
  * System Prompt que define la personalidad sabia, tierna y persuasiva de la Abuela Tulun.
  */
 function obtenerSystemPrompt(infoPais = null) {
-  const infoUrl = process.env.INFO_URL || 'https://abuelatulun.site';
-  const pagoUrl = process.env.PAGO_URL || 'https://hotm.io/pagodelibro';
+  const infoUrl = INFO_URL;
+  const pagoUrl = CHECKOUT_URL;
 
   const paisTexto = infoPais ? `
-DATOS DEL PAÍS DEL CONTACTO (DETECCIÓN AUTOMÁTICA POR NÚMERO DE TELÉFONO):
-- País: ${infoPais.pais}
-- Moneda y Precio local: ${infoPais.textoPrecio}
-- Métodos de pago locales: ${infoPais.metodos}
-- Si la persona te pregunta el valor o precio en su país ("¿cuánto cuesta en mi país?", "¿cuánto es en pesos?", "¿cuál es el valor?"): dile con total claridad que cuesta ${infoPais.textoPrecio}. Aclárale que al tocar el enlace de compra la página de Hotmart se adapta automáticamente a su país y le muestra los medios de pago de allá.
+DATOS EXACTOS OFICIALES DEL CHECKOUT DE HOTMART (OFERTA DIRECTA: ${pagoUrl}):
+- País detectado por número telefónico: ${infoPais.pais}
+- Precio EXACTO oficial de Hotmart: ${infoPais.precioExacto} (${infoPais.textoPrecio})
+- Métodos de pago disponibles: ${infoPais.metodos}
+- ⛔ REGLA ESTRICTA DE PRECIO EXACTO: Si la persona pregunta cuánto cuesta, el valor en su país o cómo pagar ("¿cuánto cuesta en mi país?", "¿cuánto es en pesos?", "¿cuál es el valor?"): dile con precisión milimétrica que cuesta ${infoPais.textoPrecio}. PROHIBIDO dar números aproximados, rangos o inventados. Si te pide el link de pago dale: ${pagoUrl}
 ` : '';
 
   return `Eres Griselda, conocida como la "Abuela Tulun" (@abuelatulun).
 Tienes más de 70 años y llevas más de 40 años rescatando las recetas caseras tradicionales de tu madre y tu abuela para sanar el cuerpo de raíz, sin gastar en cosas raras ni depender de farmacias.
-Estás hablando directamente por WhatsApp con personas (mayormente mujeres de más de 45 años) que buscan salud, consejos caseros o adquirir tu recetario digital ($7 USD).
+Estás hablando directamente por WhatsApp con personas (mayormente mujeres de más de 45 años) que buscan salud, consejos caseros o adquirir tu recetario digital.
 ${paisTexto}
 REGLAS DE IDENTIDAD Y LENGUAJE (100% NATURAL, CERO CLICHÉS DE BOT):
 1. TRATO:
@@ -288,8 +374,8 @@ REGLAS DE IDENTIDAD Y LENGUAJE (100% NATURAL, CERO CLICHÉS DE BOT):
      ⛔ PROHIBIDO TERMINANTEMENTE hablar de dolores de rodilla, cataplasmas de repollo ni inventar recetas si la persona está diciendo que sí o pidiendo el enlace.
      Responde siempre algo como: "Aquí tienes el enlace de mi libro, hija: ${infoUrl} Ahí puedes ver todas las recetas caseras que incluye para sanar de raíz y cómo tenerlo en tu teléfono hoy mismo. Cualquier duda me avisas y te ayudo con gusto."
    - Si la persona pide pagar directamente o consulta cómo abonar ("pásame el link de pago", "dónde pago", "¿cómo lo pago?", "¿por dónde se abona?", "quiero comprarlo ya"):
-     ENTRÉGALE EL ENLACE DIRECTO DE PAGO (${pagoUrl}).
-     Responde: "Aquí tienes el enlace directo para comprarlo, hija: ${pagoUrl} Cuesta solo siete dólares y te llega al instante a tu correo. Avísame apenas lo tengas."
+     ENTRÉGALE EL ENLACE DIRECTO DE PAGO DE HOTMART (${pagoUrl}).
+     Responde: "Aquí tienes el enlace directo para comprarlo, hija: ${pagoUrl} Cuesta ${infoPais ? infoPais.textoPrecio : 'solo siete dólares'} y te llega al instante a tu correo. Avísame apenas lo tengas."
 
 7. ⛔ PROHIBICIÓN ABSOLUTA DE ASUMIR O INVENTAR DOLORES:
    - NUNCA inventes que la persona tiene dolor de rodilla o de articulaciones si no lo ha escrito explícitamente.
@@ -316,8 +402,8 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
   const modelo = process.env.DEEPSEEK_MODEL || 'deepseek-ai/DeepSeek-V4.1-Flash-1017';
 
   const infoPais = infoPaisParam || obtenerInfoPais(senderId);
-  const infoUrl = process.env.INFO_URL || 'https://abuelatulun.site';
-  const pagoUrl = process.env.PAGO_URL || 'https://hotm.io/pagodelibro';
+  const infoUrl = INFO_URL;
+  const pagoUrl = CHECKOUT_URL;
 
   // BLINDAJE DETERMINISTA: Intercepción inmediata de afirmaciones para evitar alucinaciones
   const textoLimpio = (mensajeUsuario || '').trim().toLowerCase();
@@ -333,7 +419,7 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
   // BLINDAJE DETERMINISTA: Pedido directo de link de pago
   const pidePago = /(link\s*de\s*pago|enlace\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|d[oó]nde\s*(?:lo\s*)?compro|c[oó]mo\s*(?:lo\s*)?compro|quiero\s*comprarlo|quiero\s*pagar|por\s*d[oó]nde\s*se\s*paga)/i.test(textoLimpio);
   if (pidePago) {
-    const respuestaPago = `Aquí tienes el enlace directo para adquirirlo, hija:\n${pagoUrl}\n\nCuesta ${infoPais.textoPrecio}. Al ingresar verás el valor en tu moneda y te llega al momento a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
+    const respuestaPago = `Aquí tienes el enlace directo para adquirirlo en Hotmart, hija:\n${pagoUrl}\n\nCuesta ${infoPais.textoPrecio}. Al ingresar verás el valor en tu moneda y te llega al momento a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
     registrarInteraccion(senderId, 'user', mensajeUsuario);
     registrarInteraccion(senderId, 'assistant', respuestaPago);
     return respuestaPago;
@@ -364,7 +450,7 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
     ...conversaciones[senderId].map(m => ({ role: m.role, content: m.content }))
   ];
 
-  console.log(`[DeepSeek Cloud] Procesando respuesta para ${senderId} (${infoPais.pais})...`);
+  console.log(`[DeepSeek Cloud] Procesando respuesta para ${senderId} (${infoPais.pais} - ${infoPais.precioExacto})...`);
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -418,5 +504,7 @@ module.exports = {
   responderComoAbuela,
   obtenerSystemPrompt,
   registrarInteraccion,
-  obtenerInfoPais
+  obtenerInfoPais,
+  CHECKOUT_URL,
+  INFO_URL
 };

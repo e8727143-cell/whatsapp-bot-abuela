@@ -655,7 +655,7 @@ async function startWhatsApp() {
             // A. Si piden enlace de pago directo o cómo comprar:
             const pidePago = /(link\s*de\s*pago|enlace\s*de\s*pago|d[oó]nde\s*pago|c[oó]mo\s*pago|d[oó]nde\s*(?:lo\s*)?compro|c[oó]mo\s*(?:lo\s*)?compro|quiero\s*comprarlo|quiero\s*pagar|por\s*d[oó]nde\s*se\s*paga|m[eé]todos?\s*de\s*pago)/i.test(body);
             if (pidePago) {
-                const mensajePago = `Aquí tienes el enlace directo para adquirirlo, hija:\nhttps://hotm.io/pagodelibro\n\nCuesta ${infoPais.textoPrecio}. Al ingresar verás el valor en tu moneda y te llega al instante a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
+                const mensajePago = `Aquí tienes el enlace directo para adquirirlo en Hotmart, hija:\nhttps://pay.hotmart.com/W105526885V?off=qmsrqdaf\n\nEl precio exacto en ${infoPais.pais} es ${infoPais.textoPrecio}. Al ingresar verás el valor en tu moneda y te llega al instante a tu correo electrónico. Cualquier duda me avisas y te ayudo con gusto.`;
                 await sock.sendPresenceUpdate('composing', remoteJid);
                 await new Promise(r => setTimeout(r, 2000));
                 await sock.sendMessage(remoteJid, { text: mensajePago });
@@ -663,7 +663,7 @@ async function startWhatsApp() {
                 registrarInteraccion(remoteJid, 'assistant', mensajePago);
                 estados[remoteJid] = { paso: 'ia_activa', link_enviado: true, timestamp: new Date().toISOString() };
                 guardarEstados(estados);
-                log(`[ENVIADO] Enlace directo de pago entregado a ${remoteJid} (${infoPais.pais})`);
+                log(`[ENVIADO] Enlace directo de pago Hotmart entregado a ${remoteJid} (${infoPais.pais} - ${infoPais.precioExacto})`);
                 return;
             }
 
