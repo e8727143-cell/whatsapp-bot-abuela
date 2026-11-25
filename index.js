@@ -420,7 +420,7 @@ async function startWhatsApp() {
     }
 
     try {
-        const authFolder = path.join(__dirname, 'auth_info');
+        const authFolder = process.env.AUTH_DIR || (process.env.DATA_DIR ? path.join(process.env.DATA_DIR, 'auth_info') : path.join(__dirname, 'auth_info'));
         if (!fs.existsSync(authFolder)) {
             fs.mkdirSync(authFolder, { recursive: true });
         }

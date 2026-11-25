@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONVERSACIONES_PATH = path.join(__dirname, 'conversaciones.json');
+const CONVERSACIONES_PATH = process.env.DATA_DIR ? path.join(process.env.DATA_DIR, 'conversaciones.json') : path.join(__dirname, 'conversaciones.json');
 const CHECKOUT_URL = process.env.PAGO_URL || 'https://pay.hotmart.com/W105526885V?off=qmsrqdaf';
 
 // Memoria en memoria (cache de ejecución) y en disco
