@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-25T17:40:00.000Z",
+  "updatedAt": "2026-11-25T19:00:00.000Z",
   "checkoutUrl": "https://pay.hotmart.com/W105526885V?off=qmsrqdaf",
   "offer": "qmsrqdaf",
   "paises": {
@@ -8,6 +8,7 @@
       "moneda": "COP",
       "simbolo": "$",
       "precio": "$ 26.747 COP",
+      "precioFisico": "más de 400.000 pesos colombianos",
       "metodos": "Nequi, PSE, Efecty en efectivo o tarjeta",
       "textoPrecio": "exactamente $26.747 pesos colombianos ($26.747 COP) en el checkout de Hotmart, y puedes pagar en efectivo en Efecty, por Nequi, PSE o con tarjeta"
     },
@@ -16,6 +17,7 @@
       "moneda": "MXN",
       "simbolo": "$",
       "precio": "$170.52 MXN",
+      "precioFisico": "más de 2.500 pesos mexicanos",
       "metodos": "OXXO en efectivo, tarjeta o SPEI",
       "textoPrecio": "exactamente $170.52 pesos mexicanos ($170.52 MXN, con IVA incluido) en el checkout de Hotmart, y puedes pagar en cualquier OXXO en efectivo, por transferencia o con tarjeta"
     },
@@ -24,6 +26,7 @@
       "moneda": "CLP",
       "simbolo": "$",
       "precio": "$7.630 CLP",
+      "precioFisico": "más de 110.000 pesos chilenos",
       "metodos": "Webpay, Cuenta RUT, Sencillito o tarjeta",
       "textoPrecio": "exactamente $7.630 pesos chilenos ($7.630 CLP, con IVA incluido) en el checkout de Hotmart, y puedes pagar con Cuenta RUT, Webpay, Sencillito o tarjeta"
     },
@@ -32,6 +35,7 @@
       "moneda": "PEN",
       "simbolo": "S/",
       "precio": "S/ 27.00",
+      "precioFisico": "más de 400 soles",
       "metodos": "Yape, PagoEfectivo en efectivo o tarjeta",
       "textoPrecio": "exactamente 27 soles (S/ 27.00) en el checkout de Hotmart, y puedes pagar con Yape, PagoEfectivo en efectivo o con tarjeta"
     },
@@ -40,6 +44,7 @@
       "moneda": "EUR",
       "simbolo": "€",
       "precio": "7,00 €",
+      "precioFisico": "más de 100 euros",
       "metodos": "Bizum o tarjeta",
       "textoPrecio": "exactamente 7,00 euros (7,00 €) en el checkout de Hotmart, y puedes pagar con Bizum o tarjeta"
     },
@@ -48,6 +53,7 @@
       "moneda": "ARS",
       "simbolo": "$",
       "precio": "$ 13.757,00 ARS",
+      "precioFisico": "más de 200.000 pesos argentinos",
       "metodos": "tarjeta de débito o crédito",
       "textoPrecio": "exactamente $13.757 pesos argentinos ($13.757,00 ARS) en el checkout de Hotmart"
     },
@@ -56,6 +62,7 @@
       "moneda": "USD",
       "simbolo": "$",
       "precio": "$7.00 USD",
+      "precioFisico": "más de 100 dólares",
       "metodos": "tarjeta, PayPal o Apple Pay",
       "textoPrecio": "exactamente siete dólares ($7.00 USD) en el checkout de Hotmart"
     },
@@ -64,6 +71,7 @@
       "moneda": "USD",
       "simbolo": "$",
       "precio": "$7.00 USD",
+      "precioFisico": "más de 100 dólares",
       "metodos": "tarjeta de débito o crédito",
       "textoPrecio": "exactamente siete dólares ($7.00 USD) en el checkout de Hotmart"
     },
@@ -72,6 +80,7 @@
       "moneda": "UYU",
       "simbolo": "$",
       "precio": "$ 300,00 UYU",
+      "precioFisico": "más de 4.500 pesos uruguayos",
       "metodos": "tarjeta de débito o crédito",
       "textoPrecio": "exactamente $300 pesos uruguayos ($300,00 UYU) en el checkout de Hotmart"
     },
@@ -80,6 +89,7 @@
       "moneda": "BOB",
       "simbolo": "Bs",
       "precio": "Bs 87,00",
+      "precioFisico": "más de 1.200 bolivianos",
       "metodos": "tarjeta o QR",
       "textoPrecio": "exactamente 87 bolivianos (Bs 87,00) en el checkout de Hotmart"
     },
@@ -88,6 +98,7 @@
       "moneda": "CRC",
       "simbolo": "₡",
       "precio": "₡3.284,00",
+      "precioFisico": "más de 50.000 colones",
       "metodos": "tarjeta",
       "textoPrecio": "exactamente 3.284 colones (₡3.284,00) en el checkout de Hotmart"
     },
@@ -96,6 +107,7 @@
       "moneda": "GTQ",
       "simbolo": "Q",
       "precio": "Q 57.00",
+      "precioFisico": "más de 800 quetzales",
       "metodos": "tarjeta",
       "textoPrecio": "exactamente 57 quetzales (Q 57.00) en el checkout de Hotmart"
     },
@@ -104,6 +116,7 @@
       "moneda": "USD",
       "simbolo": "$",
       "precio": "$7.00 USD",
+      "precioFisico": "más de 100 dólares",
       "metodos": "tarjeta",
       "textoPrecio": "exactamente siete dólares ($7.00 USD) en el checkout de Hotmart"
     },
@@ -112,6 +125,7 @@
       "moneda": "PAB/USD",
       "simbolo": "B/.",
       "precio": "B/. 9.00",
+      "precioFisico": "más de 100 balboas o dólares",
       "metodos": "tarjeta",
       "textoPrecio": "exactamente 9 balboas / dólares (B/. 9.00) en el checkout de Hotmart"
     },
@@ -120,6 +134,7 @@
       "moneda": "DOP",
       "simbolo": "RD$",
       "precio": "RD$ 442.00",
+      "precioFisico": "más de 6.000 pesos dominicanos",
       "metodos": "tarjeta o PayPal",
       "textoPrecio": "exactamente 442 pesos dominicanos (RD$ 442.00) en el checkout de Hotmart"
     },
@@ -128,6 +143,7 @@
       "moneda": "PYG",
       "simbolo": "Gs.",
       "precio": "Gs. 47.417",
+      "precioFisico": "más de 700.000 guaraníes",
       "metodos": "tarjeta",
       "textoPrecio": "exactamente 47.417 guaraníes (Gs. 47.417) en el checkout de Hotmart"
     },
@@ -136,6 +152,7 @@
       "moneda": "HNL",
       "simbolo": "L",
       "precio": "L 199.00",
+      "precioFisico": "más de 2.500 lempiras",
       "metodos": "tarjeta",
       "textoPrecio": "exactamente 199 lempiras (L 199.00) en el checkout de Hotmart"
     },
@@ -144,6 +161,7 @@
       "moneda": "USD",
       "simbolo": "$",
       "precio": "$7.00 USD",
+      "precioFisico": "más de 100 dólares",
       "metodos": "tarjeta de crédito/débito o PayPal",
       "textoPrecio": "exactamente siete dólares ($7.00 USD) en el checkout de Hotmart"
     }
