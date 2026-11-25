@@ -556,6 +556,18 @@ async function startWhatsApp() {
                 const respuestaIA = await responderComoAbuela(remoteJid, body, infoPais);
                 await sock.sendMessage(remoteJid, { text: respuestaIA });
                 log(`[ENVIADO] Respuesta enviada a ${remoteJid}`);
+
+                // Si el mensaje enviado contiene el link de pago seguro, esperar 3 segundos y enviar mensaje separado de apoyo
+                if (respuestaIA.includes('pay.hotmart.com')) {
+                    log(`⏳ [Pausa 3s] Esperando 3 segundos para enviar mensaje separado de seguimiento post-link...`);
+                    await new Promise(r => setTimeout(r, 3000));
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                    await new Promise(r => setTimeout(r, 1500));
+                    const mensajeApoyo = `Cualquier duda que tengas al entrar me avisas por aquí mismo, mi corazón, y te voy guiando con mucho gusto.`;
+                    await sock.sendMessage(remoteJid, { text: mensajeApoyo });
+                    registrarInteraccion(remoteJid, 'assistant', mensajeApoyo);
+                    log(`[ENVIADO] Mensaje separado de seguimiento post-link enviado a ${remoteJid}`);
+                }
             } catch (err) {
                 log(`[ERROR DEEPSEEK] ${err.message}`);
                 const fallbackTexto = `Hola mi corazón, se me cortó un momentito la señal. Cuéntame con confianza qué dolor o molestia es la que más te está pesando hoy para orientarte bien.`;

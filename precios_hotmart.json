@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-25T19:00:00.000Z",
+  "updatedAt": "2026-11-25T19:20:00.000Z",
   "checkoutUrl": "https://pay.hotmart.com/W105526885V?off=qmsrqdaf",
   "offer": "qmsrqdaf",
   "paises": {
@@ -10,7 +10,7 @@
       "precio": "$ 26.747 COP",
       "precioFisico": "más de 400.000 pesos colombianos",
       "metodos": "Nequi, PSE, Efecty en efectivo o tarjeta",
-      "textoPrecio": "exactamente $26.747 pesos colombianos ($26.747 COP) en el checkout de Hotmart, y puedes pagar en efectivo en Efecty, por Nequi, PSE o con tarjeta"
+      "textoPrecio": "exactamente $26.747 pesos colombianos ($26.747 COP) con pago 100% seguro, y puedes pagar en efectivo en Efecty, por Nequi, PSE o con tarjeta"
     },
     "MX": {
       "pais": "México",
@@ -19,7 +19,7 @@
       "precio": "$170.52 MXN",
       "precioFisico": "más de 2.500 pesos mexicanos",
       "metodos": "OXXO en efectivo, tarjeta o SPEI",
-      "textoPrecio": "exactamente $170.52 pesos mexicanos ($170.52 MXN, con IVA incluido) en el checkout de Hotmart, y puedes pagar en cualquier OXXO en efectivo, por transferencia o con tarjeta"
+      "textoPrecio": "exactamente $170.52 pesos mexicanos ($170.52 MXN, con IVA incluido) con pago 100% seguro, y puedes pagar en cualquier OXXO en efectivo, por transferencia o con tarjeta"
     },
     "CL": {
       "pais": "Chile",
@@ -28,7 +28,7 @@
       "precio": "$7.630 CLP",
       "precioFisico": "más de 110.000 pesos chilenos",
       "metodos": "Webpay, Cuenta RUT, Sencillito o tarjeta",
-      "textoPrecio": "exactamente $7.630 pesos chilenos ($7.630 CLP, con IVA incluido) en el checkout de Hotmart, y puedes pagar con Cuenta RUT, Webpay, Sencillito o tarjeta"
+      "textoPrecio": "exactamente $7.630 pesos chilenos ($7.630 CLP, con IVA incluido) con pago 100% seguro, y puedes pagar con Cuenta RUT, Webpay, Sencillito o tarjeta"
     },
     "PE": {
       "pais": "Perú",
@@ -37,7 +37,7 @@
       "precio": "S/ 27.00",
       "precioFisico": "más de 400 soles",
       "metodos": "Yape, PagoEfectivo en efectivo o tarjeta",
-      "textoPrecio": "exactamente 27 soles (S/ 27.00) en el checkout de Hotmart, y puedes pagar con Yape, PagoEfectivo en efectivo o con tarjeta"
+      "textoPrecio": "exactamente 27 soles (S/ 27.00) con pago 100% seguro, y puedes pagar con Yape, PagoEfectivo en efectivo o con tarjeta"
     },
     "ES": {
       "pais": "España",
@@ -46,7 +46,7 @@
       "precio": "7,00 €",
       "precioFisico": "más de 100 euros",
       "metodos": "Bizum o tarjeta",
-      "textoPrecio": "exactamente 7,00 euros (7,00 €) en el checkout de Hotmart, y puedes pagar con Bizum o tarjeta"
+      "textoPrecio": "exactamente 7,00 euros (7,00 €) con pago 100% seguro, y puedes pagar con Bizum o tarjeta"
     },
     "AR": {
       "pais": "Argentina",
@@ -55,7 +55,7 @@
       "precio": "$ 13.757,00 ARS",
       "precioFisico": "más de 200.000 pesos argentinos",
       "metodos": "tarjeta de débito o crédito",
-      "textoPrecio": "exactamente $13.757 pesos argentinos ($13.757,00 ARS) en el checkout de Hotmart"
+      "textoPrecio": "exactamente $13.757 pesos argentinos ($13.757,00 ARS) con pago 100% seguro"
     },
     "US": {
       "pais": "Estados Unidos",
@@ -64,7 +64,7 @@
       "precio": "$7.00 USD",
       "precioFisico": "más de 100 dólares",
       "metodos": "tarjeta, PayPal o Apple Pay",
-      "textoPrecio": "exactamente siete dólares ($7.00 USD) en el checkout de Hotmart"
+      "textoPrecio": "exactamente siete dólares ($7.00 USD) con pago 100% seguro"
     },
     "EC": {
       "pais": "Ecuador",
@@ -73,7 +73,7 @@
       "precio": "$7.00 USD",
       "precioFisico": "más de 100 dólares",
       "metodos": "tarjeta de débito o crédito",
-      "textoPrecio": "exactamente siete dólares ($7.00 USD) en el checkout de Hotmart"
+      "textoPrecio": "exactamente siete dólares ($7.00 USD) con pago 100% seguro"
     },
     "UY": {
       "pais": "Uruguay",
@@ -82,7 +82,7 @@
       "precio": "$ 300,00 UYU",
       "precioFisico": "más de 4.500 pesos uruguayos",
       "metodos": "tarjeta de débito o crédito",
-      "textoPrecio": "exactamente $300 pesos uruguayos ($300,00 UYU) en el checkout de Hotmart"
+      "textoPrecio": "exactamente $300 pesos uruguayos ($300,00 UYU) con pago 100% seguro"
     },
     "BO": {
       "pais": "Bolivia",
@@ -91,7 +91,7 @@
       "precio": "Bs 87,00",
       "precioFisico": "más de 1.200 bolivianos",
       "metodos": "tarjeta o QR",
-      "textoPrecio": "exactamente 87 bolivianos (Bs 87,00) en el checkout de Hotmart"
+      "textoPrecio": "exactamente 87 bolivianos (Bs 87,00) con pago 100% seguro"
     },
     "CR": {
       "pais": "Costa Rica",
@@ -100,7 +100,7 @@
       "precio": "₡3.284,00",
       "precioFisico": "más de 50.000 colones",
       "metodos": "tarjeta",
-      "textoPrecio": "exactamente 3.284 colones (₡3.284,00) en el checkout de Hotmart"
+      "textoPrecio": "exactamente 3.284 colones (₡3.284,00) con pago 100% seguro"
     },
     "GT": {
       "pais": "Guatemala",
@@ -109,7 +109,7 @@
       "precio": "Q 57.00",
       "precioFisico": "más de 800 quetzales",
       "metodos": "tarjeta",
-      "textoPrecio": "exactamente 57 quetzales (Q 57.00) en el checkout de Hotmart"
+      "textoPrecio": "exactamente 57 quetzales (Q 57.00) con pago 100% seguro"
     },
     "SV": {
       "pais": "El Salvador",
@@ -118,7 +118,7 @@
       "precio": "$7.00 USD",
       "precioFisico": "más de 100 dólares",
       "metodos": "tarjeta",
-      "textoPrecio": "exactamente siete dólares ($7.00 USD) en el checkout de Hotmart"
+      "textoPrecio": "exactamente siete dólares ($7.00 USD) con pago 100% seguro"
     },
     "PA": {
       "pais": "Panamá",
@@ -127,7 +127,7 @@
       "precio": "B/. 9.00",
       "precioFisico": "más de 100 balboas o dólares",
       "metodos": "tarjeta",
-      "textoPrecio": "exactamente 9 balboas / dólares (B/. 9.00) en el checkout de Hotmart"
+      "textoPrecio": "exactamente 9 balboas / dólares (B/. 9.00) con pago 100% seguro"
     },
     "DO": {
       "pais": "República Dominicana",
@@ -136,7 +136,7 @@
       "precio": "RD$ 442.00",
       "precioFisico": "más de 6.000 pesos dominicanos",
       "metodos": "tarjeta o PayPal",
-      "textoPrecio": "exactamente 442 pesos dominicanos (RD$ 442.00) en el checkout de Hotmart"
+      "textoPrecio": "exactamente 442 pesos dominicanos (RD$ 442.00) con pago 100% seguro"
     },
     "PY": {
       "pais": "Paraguay",
@@ -145,7 +145,7 @@
       "precio": "Gs. 47.417",
       "precioFisico": "más de 700.000 guaraníes",
       "metodos": "tarjeta",
-      "textoPrecio": "exactamente 47.417 guaraníes (Gs. 47.417) en el checkout de Hotmart"
+      "textoPrecio": "exactamente 47.417 guaraníes (Gs. 47.417) con pago 100% seguro"
     },
     "HN": {
       "pais": "Honduras",
@@ -154,7 +154,7 @@
       "precio": "L 199.00",
       "precioFisico": "más de 2.500 lempiras",
       "metodos": "tarjeta",
-      "textoPrecio": "exactamente 199 lempiras (L 199.00) en el checkout de Hotmart"
+      "textoPrecio": "exactamente 199 lempiras (L 199.00) con pago 100% seguro"
     },
     "INT": {
       "pais": "Internacional",
@@ -163,7 +163,7 @@
       "precio": "$7.00 USD",
       "precioFisico": "más de 100 dólares",
       "metodos": "tarjeta de crédito/débito o PayPal",
-      "textoPrecio": "exactamente siete dólares ($7.00 USD) en el checkout de Hotmart"
+      "textoPrecio": "exactamente siete dólares ($7.00 USD) con pago 100% seguro"
     }
   }
 }
