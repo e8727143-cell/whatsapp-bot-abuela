@@ -516,18 +516,14 @@ async function startWhatsApp() {
                 return; // Ya hay un temporizador activo para responder a todo junto
             }
 
-            // Tiempos humanos rápidos y presencia visual inmediata:
-            // Pausa inicial súper breve (1.5 a 2s) para lectura rápida del mensaje
-            // Presencia "escribiendo..." activa de 4 a 6s
-            // Total: ~6 a 8s. El usuario ve "escribiendo..." enseguida y la respuesta llega ágilmente sin demoras eternas
-            const tiempoPausaLectura = Math.floor(1500 + Math.random() * 800);
-            const tiempoComposing = Math.floor(4000 + Math.random() * 2000);
+            // Pausa inicial breve de 1.5 a 2s (simula lectura humana del mensaje entrante)
+            const tiempoPausaLectura = Math.floor(1500 + Math.random() * 600);
 
             colasUsuarios[remoteJid].timer = setTimeout(async () => {
+                const inicioTipeo = Date.now();
                 try {
-                    log(`⏳ [Presencia WhatsApp] Mostrando "escribiendo..." durante ${(tiempoComposing / 1000).toFixed(1)}s a ${remoteJid}...`);
+                    // 1. Mostrar "escribiendo..." de inmediato para dar feedback visual instantáneo
                     await sock.sendPresenceUpdate('composing', remoteJid);
-                    await new Promise(r => setTimeout(r, tiempoComposing));
 
                     const todosLosMensajes = colasUsuarios[remoteJid]?.mensajesPendientes || [body];
                     const textoConsolidado = todosLosMensajes.join('\n');
@@ -536,8 +532,29 @@ async function startWhatsApp() {
                     log(`[DEEPSEEK] Consultando IA para responder a ${remoteJid} (${infoPais.pais}). Contexto: "${textoConsolidado}"...`);
                     const respuestaIA = await responderComoAbuela(remoteJid, textoConsolidado, infoPais);
 
+                    // 2. Tipeo dinámico proporcional: 1 segundo por cada 2 palabras (500ms por palabra)
+                    const numPalabras = respuestaIA.trim().split(/\s+/).filter(Boolean).length;
+                    const tiempoTipeoCalculado = Math.min(11500, Math.max(3500, Math.round(numPalabras * 500)));
+
+                    // Descontar el tiempo que ya demoró la llamada a la IA mientras estuvo en "escribiendo..."
+                    const tiempoTranscurridoApi = Date.now() - inicioTipeo;
+                    const tiempoRestante = Math.max(0, tiempoTipeoCalculado - tiempoTranscurridoApi);
+
+                    log(`✍️ [Tipeo Proporcional] ${numPalabras} palabras. Tiempo total de tipeo: ${(tiempoTipeoCalculado / 1000).toFixed(1)}s (esperando ${(tiempoRestante / 1000).toFixed(1)}s más en "escribiendo...")...`);
+
+                    if (tiempoRestante > 0) {
+                        const intervalos = Math.ceil(tiempoRestante / 4000);
+                        let tiempoPorEsperar = tiempoRestante;
+                        for (let i = 0; i < intervalos; i++) {
+                            await sock.sendPresenceUpdate('composing', remoteJid);
+                            const chunk = Math.min(4000, tiempoPorEsperar);
+                            await new Promise(r => setTimeout(r, chunk));
+                            tiempoPorEsperar -= chunk;
+                        }
+                    }
+
                     await sock.sendMessage(remoteJid, { text: respuestaIA });
-                    log(`[ENVIADO] Respuesta enviada a ${remoteJid}`);
+                    log(`[ENVIADO] Respuesta enviada a ${remoteJid} (${numPalabras} palabras, ${((Date.now() - inicioTipeo) / 1000).toFixed(1)}s de tipeo)`);
 
                     // Si el mensaje enviado contiene el link de pago seguro, enviar mensaje separado de apoyo tras 3s
                     if (respuestaIA.includes('pay.hotmart.com')) {
