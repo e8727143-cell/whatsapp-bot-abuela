@@ -516,16 +516,12 @@ async function startWhatsApp() {
                 return; // Ya hay un temporizador activo para responder a todo junto
             }
 
-            // Tiempos humanos con presencia visual rápida:
-            // Primer mensaje: ~6 a 8s total (2s pausa + 4-6s escribiendo)
-            // Mensajes siguientes: ~11 a 15s total (3s pausa + 8-12s escribiendo)
-            // Así el usuario ve "escribiendo..." casi de inmediato (a los 2-3s) y nunca siente que la IA no responde
-            const tiempoTotal = esPrimerMensaje
-                ? Math.floor(6000 + Math.random() * 2500)
-                : Math.floor(11000 + Math.random() * 4000);
-
-            const tiempoPausaLectura = esPrimerMensaje ? 2000 : 3000;
-            const tiempoComposing = tiempoTotal - tiempoPausaLectura;
+            // Tiempos humanos rápidos y presencia visual inmediata:
+            // Pausa inicial súper breve (1.5 a 2s) para lectura rápida del mensaje
+            // Presencia "escribiendo..." activa de 4 a 6s
+            // Total: ~6 a 8s. El usuario ve "escribiendo..." enseguida y la respuesta llega ágilmente sin demoras eternas
+            const tiempoPausaLectura = Math.floor(1500 + Math.random() * 800);
+            const tiempoComposing = Math.floor(4000 + Math.random() * 2000);
 
             colasUsuarios[remoteJid].timer = setTimeout(async () => {
                 try {
