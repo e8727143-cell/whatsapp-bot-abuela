@@ -369,9 +369,9 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
 
   // Filtros de naturalidad y seguridad
   textoRespuesta = textoRespuesta
-    .replace(/\b(?:mis\s+)?reinas\b/gi, 'mis corazones')
+    .replace(/\b(?:mis\s+)?reinas\b/gi, 'mi corazón')
     .replace(/\b(?:mi\s+)?reina\b/gi, 'mi corazón')
-    .replace(/\b(?:mis\s+)?amores\b/gi, 'mis corazones')
+    .replace(/\b(?:mis\s+)?amores\b/gi, 'mi corazón')
     .replace(/^(?:¡?Ay,?\s*(?:ay,?\s*)*)+(?:hij[oa]\s+(?:m[ií][oa]|de\s+mi\s+corazón),?\s*)?/i, '')
     .replace(/^(?:¡?Ay\s+)?hij[oa]\s+(?:m[ií][oa]|de\s+mi\s+corazón),?\s*/i, '')
     .trim();
