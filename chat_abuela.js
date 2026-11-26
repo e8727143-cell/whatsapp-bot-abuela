@@ -210,6 +210,14 @@ PRINCIPIO SUPREMO: ESTRATEGIA COMERCIAL HUMANA, AYUDA GENUINA Y FLUIDEZ
   * Si te hace preguntas personales (de dónde eres, tu familia, tus años), respóndele con frescura humana a lo que preguntó.
   * ⛔ CERO INSISTENCIA CON EL ENLACE: Si ya le pasaste el link y te habla de otra cosa, responde a lo que dijo. JAMÁS le agregues al final frases tipo "¿pudiste abrir el enlace?" ni presiones la compra.
 
+TRATO NEUTRO INICIAL, PREGUNTA DE NOMBRE Y GÉNERO (OBLIGATORIO):
+- PRIMER MENSAJE (cuando aún no has respondido antes): NUNCA te dirijas a la persona como "hija", "hijo", "reina", "amiga", "señora" ni uses adjetivos con género femenino o masculino (ej: nunca digas "cansada", "preocupada", "bienvenida", "segura"). Habla 100% NEUTRO ("mi corazón", "hola, qué gusto saludarte", "cuéntame qué molestia tienes", etc.).
+- SEGUNDO MENSAJE: Pregúntale su nombre de forma natural y cálida (ej: "¿Cómo te llamas, por cierto?" o "¿Con quién tengo el gusto de hablar?") mientras respondes su consulta, salvo que ya te haya dicho su nombre antes. Mientras no confirmes su género, mantén el trato neutro.
+- A PARTIR DEL NOMBRE O PISTAS DE GÉNERO:
+  * Si su nombre es de hombre (ej: Carlos, Juan, José, Luis, Pedro, Miguel, Jorge, Mario, Roberto, etc.) o habla de sí mismo en masculino ("cansado", "preocupado", "enfermo"): trátalo como "hijo", "mi hijo" o por su nombre, y usa adjetivos masculinos. JAMÁS le digas "hija".
+  * Si su nombre es de mujer (ej: María, Ana, Laura, Rosa, Carmen, Patricia, Sofía, etc.) o habla de sí misma en femenino ("cansada", "preocupada"): trátala como "hija", "mi hija" o por su nombre, y usa adjetivos femeninos.
+  * Si el nombre es ambiguo o todavía no dice su nombre ni da pistas: mantén trato 100% neutro ("mi corazón", sin decir "hija" ni "hijo").
+
 COMPRENSIÓN TOTAL DEL CONTEXTO Y MENSAJES ANTERIORES:
 - Lee y ten en cuenta SIEMPRE todo el historial de la conversación.
 - Si la persona envió varios mensajes seguidos, o si algún mensaje anterior quedó pendiente, o si cambia de tema:
@@ -265,17 +273,27 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
     conversaciones[senderId] = conversaciones[senderId].slice(-100);
   }
 
+  const mensajesAsistente = conversaciones[senderId].filter(m => m.role === 'assistant').length;
+  let directrizGeneroTurno = '';
+  if (mensajesAsistente === 0) {
+    directrizGeneroTurno = 'INSTRUCCIÓN ESTRICTA DE ESTE TURNO (PRIMER MENSAJE): Es tu PRIMER mensaje con esta persona. Prohibido usar "hija", "hijo", "señora", "señor", "amiga", "amigo" o adjetivos con género (como "cansada", "preocupada", "bienvenida"). Mantén trato 100% NEUTRO (usa "mi corazón" o habla sin marcar género). NO preguntes su nombre todavía en este primer mensaje.';
+  } else if (mensajesAsistente === 1) {
+    directrizGeneroTurno = 'INSTRUCCIÓN ESTRICTA DE ESTE TURNO (SEGUNDO MENSAJE): Es tu SEGUNDO mensaje con esta persona. Si en los mensajes anteriores del usuario todavía NO te dijo su nombre, PREGÚNTALE SU NOMBRE de forma natural y cálida dentro de tu respuesta (por ejemplo "¿Cómo te llamas?" o "¿Con quién tengo el gusto?") para saber cómo dirigirte. Mientras no confirmes su género con su nombre o sus palabras, mantén trato NEUTRO (NUNCA asumas "hija"). Si ya dijo un nombre o pistas claras de hombre o mujer, úsalo ("hijo" o "hija").';
+  } else {
+    directrizGeneroTurno = 'INSTRUCCIÓN DE GÉNERO PARA ESTE TURNO: Revisa todo el historial del usuario. Si su nombre o sus palabras son de hombre, trátalo como "hijo" o por su nombre y en masculino (NUNCA "hija"). Si es mujer, puedes decirle "hija" o su nombre. Si aún no sabes su nombre ni su género con certeza, mantén trato NEUTRO ("mi corazón", sin "hija" ni "hijo") y si viene al caso pregúntale su nombre.';
+  }
+
   const formatosVariados = [
     'VARIACIÓN PARA ESTE TURNO: Escribe todo en UN SOLO PÁRRAFO CORRIDO sin ningún salto de línea (todo junto). La pregunta debe ir integrada al final del texto.',
     'VARIACIÓN PARA ESTE TURNO: Escribe una respuesta muy corta, directa y espontánea (máximo 2 oraciones en total). Directo al grano sin rodeos.',
-    'VARIACIÓN PARA ESTE TURNO: Responde directamente a lo que dijo sin empezar con "Hija" ni "Mi corazón" al principio (pon el cariño al medio o al final de la pregunta).',
+    'VARIACIÓN PARA ESTE TURNO: Responde directamente a lo que dijo sin empezar con saludos ni apelativos al principio (deja el trato cercano o el nombre para el medio o el final si aplica).',
     'VARIACIÓN PARA ESTE TURNO: Escribe dos líneas breves separadas de forma relajada y humana.',
     'VARIACIÓN PARA ESTE TURNO: Escribe en un solo bloque fluido y conversacional, como un mensaje rápido de WhatsApp.'
   ];
   const directrizFormato = formatosVariados[Math.floor(Math.random() * formatosVariados.length)];
 
   const messagesParaApi = [
-    { role: 'system', content: `${obtenerSystemPrompt(infoPais)}\n\n${directrizFormato}` },
+    { role: 'system', content: `${obtenerSystemPrompt(infoPais)}\n\n${directrizGeneroTurno}\n\n${directrizFormato}` },
     ...conversaciones[senderId].map(m => ({ role: m.role, content: m.content }))
   ];
 
@@ -351,12 +369,21 @@ async function responderComoAbuela(senderId, mensajeUsuario, infoPaisParam = nul
 
   // Filtros de naturalidad y seguridad
   textoRespuesta = textoRespuesta
-    .replace(/\b(?:mis\s+)?reinas\b/gi, 'mis hijas')
-    .replace(/\b(?:mi\s+)?reina\b/gi, 'hija mía')
-    .replace(/\b(?:mis\s+)?amores\b/gi, 'mis hijas')
-    .replace(/^(?:¡?Ay,?\s*(?:ay,?\s*)*)+(?:hija\s+(?:mía|de\s+mi\s+corazón),?\s*)?/i, '')
-    .replace(/^(?:¡?Ay\s+)?hija\s+(?:mía|de\s+mi\s+corazón),?\s*/i, '')
+    .replace(/\b(?:mis\s+)?reinas\b/gi, 'mis corazones')
+    .replace(/\b(?:mi\s+)?reina\b/gi, 'mi corazón')
+    .replace(/\b(?:mis\s+)?amores\b/gi, 'mis corazones')
+    .replace(/^(?:¡?Ay,?\s*(?:ay,?\s*)*)+(?:hij[oa]\s+(?:m[ií][oa]|de\s+mi\s+corazón),?\s*)?/i, '')
+    .replace(/^(?:¡?Ay\s+)?hij[oa]\s+(?:m[ií][oa]|de\s+mi\s+corazón),?\s*/i, '')
     .trim();
+
+  // En el primer mensaje, garantizar trato 100% neutro aunque se escape un "hija"/"hijo"
+  if (mensajesAsistente === 0) {
+    textoRespuesta = textoRespuesta
+      .replace(/\b(?:mi\s+)?hij[oa](?:\s+(?:m[ií][oa]|de\s+mi\s+coraz[oó]n))?\b/gi, 'mi corazón')
+      .replace(/\bmi\s+coraz[oó]n\s*,?\s*mi\s+coraz[oó]n\b/gi, 'mi corazón')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
 
   // Limpieza de emojis excesivos: no usar emojis todo el tiempo
   textoRespuesta = textoRespuesta.replace(/[🌿👵✨💛🌸❤️🤍🔒]/gu, '').trim();
