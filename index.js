@@ -516,8 +516,8 @@ async function startWhatsApp() {
                 return; // Ya hay un temporizador activo para responder a todo junto
             }
 
-            // Pausa inicial breve de 1.5 a 2s (simula lectura humana del mensaje entrante)
-            const tiempoPausaLectura = Math.floor(1500 + Math.random() * 600);
+            // Pausa inicial de 5 segundos (simula lectura humana del mensaje entrante)
+            const tiempoPausaLectura = Math.floor(4800 + Math.random() * 500);
 
             colasUsuarios[remoteJid].timer = setTimeout(async () => {
                 const inicioTipeo = Date.now();
